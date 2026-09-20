@@ -17,10 +17,12 @@
       GPO-Settings.csv / GPO-Scope.csv            <- every setting, every link
       Cleanup-*.csv                               <- disabled / stale accounts
       LogonRestrictions.csv                       <- per-user logon limits
+      Drift-Changes.csv                           <- every change in the drift window
       ad-snapshot.json                            <- state, for the next run's comparison
 
     The detailed report has a left navigation with separate views:
       Focus areas       - which GPOs configure each area auditors ask about
+      Password restrict.- password filter DLLs, banned word lists, dictionaries
       Privileged groups - Administrators / Domain / Enterprise / Schema Admins
       Logon restrictions- per-user logon hours (7x24 grid), workstations, expiry
       All GPOs          - the full nested inventory with search
@@ -29,8 +31,11 @@
       Cleanup           - disabled users, stale users, stale computers
 
     The committee review is a separate, print-ready document: cover sheet,
-    executive summary, change since the last review, control mapping and
-    sign-off block.
+    executive summary, item-level configuration drift over a fixed window
+    (-DriftDays, default 30), control mapping and sign-off block. Drift is
+    reported as five differential tables - control areas, Group Policy
+    settings, privileged group membership, user accounts, computer accounts -
+    and each one states plainly when nothing changed.
 
     The focus areas cover what auditors ask for by name:
         A. Password policy (users and administrators, incl. fine-grained PSOs)
@@ -66,6 +71,12 @@
     UTC offset used to draw the logon-hour grids. logonHours is stored in UTC;
     the grids are drawn in local time. Default: this machine's current offset.
 
+.PARAMETER SkipPasswordRestrictions
+    Skip the password content restriction check. That check reads
+    HKLM\SYSTEM\CurrentControlSet\Control\Lsa on the domain controller to list
+    the registered password filter DLLs (banned word lists, dictionaries,
+    breached-password screening). Use this if a registry read is not permitted.
+
 .PARAMETER SkipCommitteeReport
     Skip the separate committee review HTML (AD-Committee-Review-<domain>-YYYYMMDD.html).
 
@@ -77,6 +88,18 @@
 
 .PARAMETER StaleComputerDays
     A computer with no check-in in this many days is listed as stale. Default 60.
+
+.PARAMETER DriftDays
+    Size of the drift window, in days, used by the committee review. Drift is
+    measured against the state recorded this many days ago - NOT against the
+    previous run. Default 30. The newest snapshot that is at least this old is
+    used as the baseline; if none is that old yet, the oldest available snapshot
+    is used and the report states the period actually covered.
+
+.PARAMETER SkipUserDrift
+    Skip the per-account (user and computer) differential tables in the
+    committee review. Control-area and privileged-group drift are still
+    reported. Use on very large domains if the snapshot file size matters.
 
 .PARAMETER NoCsv
     Skip the flat CSV exports.
@@ -103,10 +126,14 @@ param(
     [switch]   $SkipPerGpoHtml,
     [switch]   $SkipPrivilegedGroups,
     [switch]   $SkipCleanup,
+    [switch]   $SkipPasswordRestrictions,
     [switch]   $SkipCommitteeReport,
     [int]      $UtcOffsetHours = 9999,
     [int]      $StaleUserDays = 30,
     [int]      $StaleComputerDays = 60,
+    [ValidateRange(1, 3650)]
+    [int]      $DriftDays = 30,
+    [switch]   $SkipUserDrift,
     [switch]   $NoCsv,
     [switch]   $ShowWhenDone
 )
@@ -114,11 +141,15 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
 
-$script:ScriptVersion = '3.3.0'
+$script:ScriptVersion = '3.6.0'
 $script:ScriptName    = 'Export-ADAuditReport.ps1'
 $script:Brand         = 'AuditHat'
 $script:BrandUrl      = 'https://audithat.com'
 $script:BrandTag      = 'Baseline and drift reporting for financial institutions'
+
+# Most rows any single drift table will print. The complete, uncapped list is
+# always written to Drift-Changes.csv.
+$script:DriftRowCap   = 150
 
 # ------------------------------------------------------------------ helpers --
 
@@ -285,16 +316,17 @@ function Convert-AuditValue {
 #   CSF   = NIST Cybersecurity Framework 2.0 category, as a cross-reference for
 #           institutions aligned to the CRI Profile or to CSF directly
 $script:ControlMap = @{
-    'pwd'        = 'FFIEC IS II.C.7 User Security Controls; II.C.15 Logical Security | NIST CSF 2.0 PR.AA'
-    'lockout'    = 'FFIEC IS II.C.7 User Security Controls | NIST CSF 2.0 PR.AA'
-    'audit'      = 'FFIEC IS II.C Risk Mitigation (logging and monitoring); Audit booklet | NIST CSF 2.0 DE.CM, PR.PS'
-    'inactivity' = 'FFIEC IS II.C.7 User Security Controls; II.C.15 Logical Security | NIST CSF 2.0 PR.AA'
-    'usb'        = 'FFIEC IS II.C.13 Control of Information | NIST CSF 2.0 PR.DS, PR.PS'
-    'banner'     = 'FFIEC IS II.C.15 Logical Security | NIST CSF 2.0 PR.AT, GV.PO'
-    'privileged' = 'FFIEC IS II.C.7 User Security Controls (least privilege, access rights administration) | NIST CSF 2.0 PR.AA'
-    'stale'      = 'FFIEC IS II.C.7 User Security Controls (provisioning and deprovisioning) | NIST CSF 2.0 PR.AA, ID.AM'
-    'logon'      = 'FFIEC IS II.C.7 User Security Controls; II.C.15 Logical Security | NIST CSF 2.0 PR.AA'
-    'gpo'        = 'FFIEC IS II.C.2 Technology Design; Architecture, Infrastructure and Operations booklet | NIST CSF 2.0 PR.PS'
+    'pwd'        = 'FFIEC IS II.C.7 User Security Controls; II.C.15 Logical Security | NIST CSF 2.0 PR.AA | CRI Profile PR.AA | CIS Controls v8 5.2, 6.3'
+    'lockout'    = 'FFIEC IS II.C.7 User Security Controls | NIST CSF 2.0 PR.AA | CRI Profile PR.AA | CIS Controls v8 6.3; CIS Benchmark - Account Lockout Policy'
+    'audit'      = 'FFIEC IS II.C Risk Mitigation (logging and monitoring); Audit booklet | NIST CSF 2.0 DE.CM, PR.PS | CRI Profile DE.CM, PR.PS | CIS Controls v8 8.2, 8.5, 8.11'
+    'inactivity' = 'FFIEC IS II.C.7 User Security Controls; II.C.15 Logical Security | NIST CSF 2.0 PR.AA | CRI Profile PR.AA, PR.PS | CIS Controls v8 4.3'
+    'usb'        = 'FFIEC IS II.C.13 Control of Information | NIST CSF 2.0 PR.DS, PR.PS | CRI Profile PR.DS, PR.PS | CIS Controls v8 3.6, 10.3'
+    'banner'     = 'FFIEC IS II.C.15 Logical Security | NIST CSF 2.0 PR.AT, GV.PO | CRI Profile PR.AT, PR.PS | CIS Controls v8 4.1; CIS Benchmark - Interactive logon message'
+    'privileged' = 'FFIEC IS II.C.7 User Security Controls (least privilege, access rights administration) | NIST CSF 2.0 PR.AA | CRI Profile PR.AA | CIS Controls v8 5.4, 6.8'
+    'stale'      = 'FFIEC IS II.C.7 User Security Controls (provisioning and deprovisioning) | NIST CSF 2.0 PR.AA, ID.AM | CRI Profile PR.AA, ID.AM | CIS Controls v8 5.1, 5.3'
+    'logon'      = 'FFIEC IS II.C.7 User Security Controls; II.C.15 Logical Security | NIST CSF 2.0 PR.AA | CRI Profile PR.AA | CIS Controls v8 6.1, 6.2'
+    'pwdcontent' = 'FFIEC IS II.C.7 User Security Controls (authentication strength) | NIST CSF 2.0 PR.AA | CRI Profile PR.AA | CIS Controls v8 5.2'
+    'gpo'        = 'FFIEC IS II.C.2 Technology Design; Architecture, Infrastructure and Operations booklet | NIST CSF 2.0 PR.PS | CRI Profile PR.PS | CIS Controls v8 4.1, 4.2'
 }
 
 # Recommended logon banner, offered when the domain has none configured.
@@ -387,6 +419,10 @@ $script:FocusAreas = @(
         Pattern = 'Message text for users attempting to log on|Message title for users attempting to log on|legalnotice|Logon Banner|Interactive logon: Message'
     }
 )
+
+# key -> short label, used by the drift tables
+$script:AreaTitle = @{}
+foreach ($fa in $script:FocusAreas) { $script:AreaTitle[$fa.Key] = ('{0}. {1}' -f $fa.Letter, ($fa.Title -split ' - ')[0]) }
 
 # ---------------------------------------------------- setting extractors ----
 
@@ -1038,6 +1074,8 @@ function Get-CleanupData {
     $disabled  = @()
     $staleU    = @()
     $unknownEn = 0
+    $rosterU   = @()   # every user, compact - drift baseline
+    $rosterC   = @()   # every computer, compact - drift baseline
 
     foreach ($u in $allUsers) {
         $ll = Get-Prop $u 'LastLogonDate'
@@ -1062,6 +1100,17 @@ function Get-CleanupData {
             Description = (Get-Prop $u 'Description')
         }
 
+        # compact roster row - this is what gets compared run to run
+        $expU = Get-Prop $u 'AccountExpirationDate'
+        $rosterU += [pscustomobject]@{
+            s = [string]$u.SamAccountName
+            n = [string]$u.Name
+            e = $en
+            p = $row.PwdNever
+            x = $(if ($expU) { ([datetime]$expU).ToString('yyyy-MM-dd') } else { '' })
+            o = [string]$row.OU
+        }
+
         if ($enKnown -and -not $en) { $disabled += $row; continue }
 
         if ($ll) { if ($ll -lt $userCut) { $staleU += $row } }
@@ -1082,6 +1131,14 @@ function Get-CleanupData {
     foreach ($c in $allComps) {
         $ll = Get-Prop $c 'LastLogonDate'
         $wc = Get-Prop $c 'whenCreated'
+
+        $rosterC += [pscustomobject]@{
+            s = [string]$c.Name
+            n = [string](Get-Prop $c 'OperatingSystem')
+            e = [bool](Get-Prop $c 'Enabled')
+            o = [string](($c.DistinguishedName -split ',', 2)[1])
+        }
+
         $stale = $false
         if ($ll) { $stale = ($ll -lt $compCut) }
         elseif ($wc) { $stale = ($wc -lt $compCut) }
@@ -1107,12 +1164,396 @@ function Get-CleanupData {
         UnknownEnabled   = $unknownEn
         TotalUsers       = $allUsers.Count
         TotalComputers   = $allComps.Count
+        RosterUsers      = @($rosterU)
+        RosterComputers  = @($rosterC)
         Disabled       = @($disabled | Sort-Object Name)
         StaleUsers     = @($staleU   | Sort-Object { $_.DaysIdle } -Descending)
         StaleComputers = @($staleC   | Sort-Object { $_.DaysIdle } -Descending)
     }
 }
 
+
+# ------------------------------------------------ password restrictions ----
+# Auditors ask "are there any password restrictions beyond length and age -
+# banned words, a dictionary, a breached-password check?" In Active Directory
+# that is never a GPO setting: it is a password filter DLL registered with the
+# LSA on every domain controller. This catalogue turns the DLL names found in
+# HKLM\SYSTEM\CurrentControlSet\Control\Lsa\Notification Packages into
+# something a committee can read.
+$script:PwdFilterCatalog = @(
+    [pscustomobject]@{
+        Key = 'default-scecli'; Product = 'Windows built-in complexity (default)'; Custom = $false
+        Dll = '^scecli$'; RegPath = ''; Services = @(); Vendor = 'Microsoft'
+        WordList = 'None - not configurable'
+        Notes  = 'The standard Windows filter. When "Password must meet complexity requirements" is enabled it blocks passwords containing the account name or any three-or-more character token of the display name, and requires three of five character categories. It has NO configurable word list.'
+    }
+    [pscustomobject]@{
+        Key = 'default-rassfm'; Product = 'Windows RAS / SFM (default)'; Custom = $false
+        Dll = '^rassfm?$'; RegPath = ''; Services = @(); Vendor = 'Microsoft'
+        WordList = 'None'
+        Notes  = 'Ships with Windows. Not a password-content restriction.'
+    }
+    [pscustomobject]@{
+        Key = 'entra'; Product = 'Microsoft Entra Password Protection'; Custom = $true
+        Dll = 'AzureADPasswordProtection'
+        RegPath  = 'SOFTWARE\Microsoft\Azure AD Password Protection'
+        Services = @('AzureADPasswordProtectionDCAgent')
+        Vendor   = 'Microsoft'
+        WordList = 'Microsoft global banned list + tenant CUSTOM banned list. Cached on the DC in encrypted form - export it from the Entra admin center (Protection > Authentication methods > Password protection).'
+        Notes    = 'Scores a password against the Microsoft global banned-password list and the tenant custom banned word list, with fuzzy matching and character substitution. Runs in Audit or Enforce mode - the mode is reported below, because a deployment left in Audit blocks nothing.'
+    }
+    [pscustomobject]@{
+        Key = 'enzoic'; Product = 'Enzoic for Active Directory'; Custom = $true
+        Dll = 'Enzoic'
+        RegPath  = 'SOFTWARE\Enzoic'
+        Services = @('EnzoicSvc', 'Enzoic', 'EnzoicClient')
+        Vendor   = 'Enzoic'
+        WordList = 'Custom dictionary plus the Enzoic breached-credentials service. Settings are stored in Active Directory, not on the DC - export them from the Enzoic console.'
+        Notes    = 'Screens against passwords exposed in breaches and cracking dictionaries, with fuzzy / leet-speak matching and root-word detection; blocks passwords containing the user name, login or email; supports a CUSTOM dictionary of business-specific words. Can also monitor accounts continuously, not only at password change.'
+    }
+    [pscustomobject]@{
+        Key = 'specops'; Product = 'Specops Password Policy'; Custom = $true
+        Dll = 'specops|sentinel|pspwd'
+        RegPath  = 'SOFTWARE\Specopssoft\Specops Password Policy'
+        Services = @('SpecopsPasswordPolicySentinel', 'Specops Password Policy Sentinel', 'SpecopsSentinel')
+        Vendor   = 'Specops Software'
+        WordList = 'Custom dictionaries and the Breached Password Protection list, held in the Specops store - export from the Specops Password Policy domain administration tool.'
+        Notes    = 'The "Sentinel" password filter and service, installed on every writable domain controller, enforce the Specops policy: custom dictionaries and banned word lists, passphrase rules, length-based ageing, and breached-password screening. Policies are authored as Group Policy objects through the Specops extension.'
+    }
+    [pscustomobject]@{
+        Key = 'lithnet'; Product = 'Lithnet Password Protection for Active Directory'; Custom = $true
+        Dll = 'lithnet'
+        RegPath  = 'SOFTWARE\Lithnet\PasswordFilter'
+        Services = @()
+        Vendor   = 'Lithnet (open source)'
+        WordList = 'Banned word store and compromised-password (HIBP) store on disk - path is in the configuration below.'
+        Notes    = 'Banned word list, normalised / leet-speak matching, compromised password store, plus length, complexity and repeated-character rules. Configured entirely through its own Group Policy ADMX under Lithnet Password Protection.'
+    }
+    [pscustomobject]@{
+        Key = 'passfiltex'; Product = 'PassFiltEx (open source)'; Custom = $true
+        Dll = 'PassFiltEx'
+        RegPath  = 'SOFTWARE\PassFiltEx'
+        Services = @()
+        Vendor   = 'Joseph Ryan Ries (open source)'
+        WordFile = 'PassFiltExBlacklist.txt'
+        WordList = 'Plain-text blacklist file in System32 - printed in full below when it can be read.'
+        Notes    = 'Blocks any password containing a string from a plain-text blacklist file, with configurable token matching.'
+    }
+    [pscustomobject]@{
+        Key = 'nfront'; Product = 'nFront Password Filter'; Custom = $true
+        Dll = '^ppro|nfront|nppfltr'
+        RegPath  = 'SOFTWARE\nFront Security\nFront Password Filter'
+        Services = @()
+        Vendor   = 'nFront Security'
+        WordList = 'Dictionary file and banned word list per policy - export from the nFront configuration tool.'
+        Notes    = 'Up to six password policies per domain with dictionary checking, banned word lists and pattern rules. The filter registers in Notification Packages as PPRO.'
+    }
+    [pscustomobject]@{
+        Key = 'ppe'; Product = 'Netwrix / Anixis Password Policy Enforcer'; Custom = $true
+        Dll = '^ppe|anixis'
+        RegPath  = 'SOFTWARE\Anixis\Password Policy Enforcer'
+        Services = @('PPEsvc', 'Password Policy Enforcer')
+        Vendor   = 'Netwrix (formerly Anixis)'
+        WordList = 'Dictionary and banned word rules per policy - export from the PPE console.'
+        Notes    = 'Rule-based policies with dictionary, banned word, pattern and compromised-password checks.'
+    }
+    [pscustomobject]@{
+        Key = 'manageengine'; Product = 'ManageEngine ADSelfService Plus'; Custom = $true
+        Dll = 'adssp|adselfservice'
+        RegPath  = ''
+        Services = @()
+        Vendor   = 'ManageEngine'
+        WordList = 'Custom dictionary and pattern restrictions held in the ADSelfService Plus console.'
+        Notes    = 'Custom password policy with dictionary, pattern and repeated-character restrictions.'
+    }
+    [pscustomobject]@{
+        Key = 'safepass'; Product = 'Safepass.me'; Custom = $true
+        Dll = 'safepass'
+        RegPath  = ''
+        Services = @()
+        Vendor   = 'Safepass.me'
+        WordList = 'Breached-password corpus and custom banned words held by the product.'
+        Notes    = 'Breached-password and banned-word enforcement at password change.'
+    }
+    [pscustomobject]@{
+        Key = 'openpasswordfilter'; Product = 'OpenPasswordFilter (open source)'; Custom = $true
+        Dll = 'OpenPasswordFilter|^OPF'
+        RegPath  = ''
+        Services = @('OpenPasswordFilter')
+        Vendor   = 'open source'
+        WordList = 'Plain-text banned word file read by the companion service - see the service configuration.'
+        Notes    = 'A filter DLL plus a userspace service that checks each password against a banned word file.'
+    }
+)
+
+# GPO settings that indicate a third-party password product or a word list
+$script:PwdRestrictPattern = 'banned|blacklist|black list|blocklist|denylist|dictionary|prohibit|forbidden|restricted word|passphrase|Specops|nFront|Anixis|Password Policy Enforcer|Lithnet|PassFiltEx|ADSelfService|password filter|compromised password|breached password|leaked password|pwned'
+
+function Get-RegValues {
+    <# Enumerate one registry key's values, locally or on a remote DC. #>
+    param([string]$Server, [string]$Path)
+    $out = @()
+    try {
+        $base = if ($Server) {
+            [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $Server)
+        } else {
+            [Microsoft.Win32.RegistryKey]::OpenBaseKey('LocalMachine', 'Default')
+        }
+        $k = $base.OpenSubKey($Path)
+        if ($null -eq $k) { return @() }
+        foreach ($n in @($k.GetValueNames())) {
+            $v = $k.GetValue($n)
+            if ($v -is [array]) { $v = ($v -join '; ') }
+            $out += [pscustomobject]@{ Name = $(if ($n) { $n } else { '(default)' }); Value = "$v" }
+        }
+        $k.Close(); $base.Close()
+    }
+    catch { }
+    return $out
+}
+
+function Get-ServiceNames {
+    <# Service names present on the DC, lower-cased. Empty on any failure. #>
+    param([string]$Server)
+    try {
+        $p = @{ ClassName = 'Win32_Service'; ErrorAction = 'Stop' }
+        if ($Server) { $p['ComputerName'] = $Server }
+        return @(Get-CimInstance @p | ForEach-Object { "$($_.Name)".ToLower() })
+    }
+    catch { return @() }
+}
+
+function Get-EntraPasswordProtectionMode {
+    <#
+      Whether Microsoft Entra Password Protection is actually ENFORCING or only
+      auditing. The DC agent writes its policy state to event 30006 in its own
+      Admin channel; "AuditOnly: 1" means nothing is being blocked, which is a
+      finding in itself. Returns $null when the log cannot be read.
+    #>
+    param([string]$Server)
+    try {
+        $p = @{
+            FilterHashtable = @{ LogName = 'Microsoft-AzureADPasswordProtection-DCAgent/Admin'; Id = 30006 }
+            MaxEvents = 1; ErrorAction = 'Stop'
+        }
+        if ($Server) { $p['ComputerName'] = $Server }
+        $ev = Get-WinEvent @p
+        if ($null -eq $ev) { return $null }
+
+        $txt = "$($ev.Message)"
+        $enabled = $null; $audit = $null
+        if ($txt -match 'Enabled:\s*(\d)')   { $enabled = ($Matches[1] -eq '1') }
+        if ($txt -match 'AuditOnly:\s*(\d)') { $audit   = ($Matches[1] -eq '1') }
+
+        $mode = 'Unknown'
+        if ($enabled -eq $false)     { $mode = 'Disabled' }
+        elseif ($audit -eq $true)    { $mode = 'Audit only - nothing is blocked' }
+        elseif ($audit -eq $false)   { $mode = 'Enforced' }
+
+        return [pscustomobject]@{
+            Mode = $mode; Enabled = $enabled; AuditOnly = $audit
+            When = $ev.TimeCreated; Raw = $txt
+        }
+    }
+    catch { return $null }
+}
+
+function Get-LsaPasswordFilters {
+    <#
+      The registered password filter DLLs, from
+      HKLM\SYSTEM\CurrentControlSet\Control\Lsa\Notification Packages.
+      Ok = $false means the registry could not be read - which is NOT the same
+      as "no filters are installed", and the report must say so.
+    #>
+    param([string]$Server)
+
+    $out = [pscustomobject]@{ Ok = $false; Source = ''; Error = ''; Packages = @() }
+    try {
+        $base = if ($Server) {
+            [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $Server)
+        } else {
+            [Microsoft.Win32.RegistryKey]::OpenBaseKey('LocalMachine', 'Default')
+        }
+        $k = $base.OpenSubKey('SYSTEM\CurrentControlSet\Control\Lsa')
+        if ($null -eq $k) { throw 'The Lsa key could not be opened.' }
+        $np = $k.GetValue('Notification Packages')
+        $k.Close(); $base.Close()
+
+        $out.Ok       = $true
+        $out.Source   = $(if ($Server) { ("Remote registry on {0}" -f $Server) } else { ("Local registry on {0}" -f $env:COMPUTERNAME) })
+        $out.Packages = @(@($np) | Where-Object { "$_".Trim() })
+    }
+    catch { $out.Error = $_.Exception.Message }
+    return $out
+}
+
+function Get-PasswordRestrictions {
+    <#
+      What actually restricts the CONTENT of a password in this domain.
+
+      A product is detected from FOUR independent signals, because vendors
+      rename their DLLs and not every filter name is documented:
+        1. the DLL registered in the LSA Notification Packages value
+        2. the product's own registry key
+        3. the product's Windows service
+        4. for Entra Password Protection, its DC agent event log
+      Any one of them counts, and the report says which fired - so an
+      undocumented DLL name never turns into a false "not installed".
+
+      Checked = $false means the registry could not be read at all, which is
+      NOT the same as "nothing is configured" and must be reported as such.
+    #>
+    param([string]$Server, $Records)
+
+    $res = [pscustomobject]@{
+        Checked     = $false
+        Source      = ''
+        Error       = ''
+        Packages    = @()
+        Filters     = @()      # one row per registered DLL
+        Products    = @()      # one row per detected product, however detected
+        ProductKeys = @()
+        WordLists   = @()
+        GpoHits     = @()
+        EntraMode   = $null
+        ServicesRead = $false
+        HasCustom   = $false
+    }
+
+    $host_ = $Server
+
+    # ---- signal 1: the LSA notification packages
+    $lsa = Get-LsaPasswordFilters -Server $host_
+    $res.Checked  = $lsa.Ok
+    $res.Source   = $lsa.Source
+    $res.Error    = $lsa.Error
+    $res.Packages = @($lsa.Packages)
+
+    # ---- signal 3 (gathered once): services on the DC
+    $svc = @(Get-ServiceNames -Server $host_)
+    $res.ServicesRead = ($svc.Count -gt 0)
+
+    # ---- per-DLL rows, so an unknown filter in LSASS is still surfaced
+    $filters = @()
+    $matchedKeys = @{}
+    foreach ($p in @($res.Packages)) {
+        $name = "$p".Trim()
+        if (-not $name) { continue }
+        $hit = $null
+        foreach ($c in $script:PwdFilterCatalog) {
+            if ($c.Dll -and $name -match $c.Dll) { $hit = $c; break }
+        }
+        if ($hit) {
+            $matchedKeys[$hit.Key] = $true
+            $filters += [pscustomobject]@{
+                Dll = $name; Product = $hit.Product; Custom = [bool]$hit.Custom
+                Notes = $hit.Notes; Known = $true
+            }
+            if ($hit.Custom) { $res.HasCustom = $true }
+        }
+        else {
+            $filters += [pscustomobject]@{
+                Dll = $name; Product = 'Unrecognised password filter'; Custom = $true
+                Notes = 'This DLL is registered with the LSA and runs on every password change, but it is not one this report recognises. Identify it and document what it enforces - an unknown filter in the password path is itself worth a question.'
+                Known = $false
+            }
+            $res.HasCustom = $true
+        }
+    }
+    $res.Filters = @($filters)
+
+    # ---- per-product detection across all signals
+    $products = @()
+    foreach ($c in $script:PwdFilterCatalog) {
+        if (-not $c.Custom) { continue }
+
+        $why = @()
+        if ($matchedKeys.ContainsKey($c.Key)) { $why += 'password filter registered with the LSA' }
+
+        $keyVals = @()
+        if ($c.RegPath) {
+            $keyVals = @(Get-RegValues -Server $host_ -Path $c.RegPath)
+            if ($keyVals.Count -gt 0) { $why += 'product registry key present' }
+        }
+
+        $svcFound = @()
+        if ($svc.Count -gt 0) {
+            foreach ($s in @($c.Services)) {
+                $sl = "$s".ToLower()
+                if ($svc -contains $sl) { $svcFound += $s }
+            }
+            if ($svcFound.Count -gt 0) { $why += ('service installed: ' + ($svcFound -join ', ')) }
+        }
+
+        # signal 4: Entra's own agent log also tells us the enforcement mode
+        if ($c.Key -eq 'entra') {
+            $em = Get-EntraPasswordProtectionMode -Server $host_
+            if ($null -ne $em) {
+                $res.EntraMode = $em
+                $why += 'DC agent event log reports a policy state'
+            }
+        }
+
+        if ($why.Count -eq 0) { continue }
+
+        if ($keyVals.Count -gt 0) {
+            $res.ProductKeys += [pscustomobject]@{ Product = $c.Product; Path = ('HKLM\' + $c.RegPath); Values = $keyVals }
+        }
+
+        $mode = ''
+        if ($c.Key -eq 'entra' -and $null -ne $res.EntraMode) { $mode = $res.EntraMode.Mode }
+
+        $products += [pscustomobject]@{
+            Key = $c.Key; Product = $c.Product; Vendor = $c.Vendor
+            DetectedBy = $why; Mode = $mode
+            WordList = $c.WordList; Notes = $c.Notes
+            Services = $svcFound
+        }
+        $res.HasCustom = $true
+
+        # a readable plain-text word list
+        $wf = Get-Prop $c 'WordFile'
+        if ($wf) {
+            $paths = @()
+            if ($host_) { $paths += ("\\{0}\C$\Windows\System32\{1}" -f $host_, $wf) }
+            elseif ($env:SystemRoot) { $paths += (Join-Path $env:SystemRoot ('System32\{0}' -f $wf)) }
+            foreach ($fp in $paths) {
+                try {
+                    if (-not (Test-Path -LiteralPath $fp)) { continue }
+                    $words = @(Get-Content -LiteralPath $fp -ErrorAction Stop |
+                                ForEach-Object { "$_".Trim() } |
+                                Where-Object { $_ -and -not $_.StartsWith('#') })
+                    $res.WordLists += [pscustomobject]@{
+                        Product = $c.Product; Path = $fp; Count = $words.Count
+                        Words = @($words | Select-Object -First 250)
+                        Truncated = ($words.Count -gt 250)
+                    }
+                }
+                catch { }
+            }
+        }
+    }
+    $res.Products = @($products)
+
+    # ---- GPO settings that look like a password-content product
+    $hits = @()
+    foreach ($r in @($Records)) {
+        foreach ($sx in (@($r.Computer) + @($r.User))) {
+            $hay = ('{0} | {1} | {2}' -f $sx.Container, $sx.Name, $sx.Value)
+            if ($hay -match $script:PwdRestrictPattern) {
+                $hits += [pscustomobject]@{
+                    Gpo = $r.Gpo.DisplayName; Anchor = $r.Anchor; Applying = $r.Applying
+                    Side = $sx.Side; Container = $sx.Container; Name = $sx.Name; Value = $sx.Value
+                }
+            }
+        }
+    }
+    $res.GpoHits = @($hits)
+    if (@($hits | Where-Object { $_.Applying }).Count -gt 0) { $res.HasCustom = $true }
+
+    return $res
+    return $res
+}
 $script:DayNames = @('Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday')
 $script:DayShort = @('Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat')
 
@@ -1651,6 +2092,7 @@ foreach ($pg in $privGroups) {
 $cleanup = [pscustomobject]@{
     Checked = $false; DisabledVerified = $false; UnknownEnabled = 0
     TotalUsers = 0; TotalComputers = 0
+    RosterUsers = @(); RosterComputers = @()
     Disabled = @(); StaleUsers = @(); StaleComputers = @()
 }
 if (-not $SkipCleanup -and $adAvailable) {
@@ -1666,6 +2108,26 @@ if ($adAvailable) {
     Write-Step 'Checking user logon restrictions'
     try { $logonScan = Get-UserLogonRestrictions -Server $Server -OffsetHours $UtcOffsetHours }
     catch { Write-Warn ("Logon-hours check failed: {0}" -f $_.Exception.Message) }
+}
+
+# -------------------------------------------------- password restrictions --
+
+$pwdRestrict = $null
+if (-not $SkipPasswordRestrictions) {
+    Write-Step 'Checking password content restrictions (filters, banned words)'
+    try { $pwdRestrict = Get-PasswordRestrictions -Server $Server -Records $records }
+    catch { Write-Warn ("Password restriction check failed: {0}" -f $_.Exception.Message) }
+}
+if ($null -eq $pwdRestrict) {
+    $pwdRestrict = [pscustomobject]@{
+        Checked = $false; Source = ''
+        Error = $(if ($SkipPasswordRestrictions) { 'Skipped - the report was run with -SkipPasswordRestrictions.' } else { 'The check did not run.' })
+        Packages = @(); Filters = @(); ProductKeys = @(); WordLists = @(); GpoHits = @(); HasCustom = $false
+    }
+}
+if (-not $pwdRestrict.Checked -and -not $SkipPasswordRestrictions) {
+    Write-Warn ("Password filter registry not readable{0} - the report will show NOT CHECKED rather than 'none configured'." -f `
+        $(if ($pwdRestrict.Error) { ': ' + $pwdRestrict.Error } else { '' }))
 }
 
 # ------------------------------------------------------------ html builder --
@@ -1803,6 +2265,18 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
 .tbl th{text-align:left;padding:8px 10px;background:var(--chip);color:var(--mut);border-bottom:1px solid var(--line);font-size:11px;text-transform:uppercase;letter-spacing:.03em;position:sticky;top:0}
 .tbl td{padding:6px 10px;border-bottom:1px solid var(--line);vertical-align:top}
 .tblbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:14px 0 12px}
+
+/* ---- password restrictions ---- */
+table.grid{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:8px;font-size:12.5px;margin:10px 0 6px}
+table.grid th{text-align:left;padding:8px 10px;background:var(--chip);color:var(--mut);border-bottom:1px solid var(--line);font-size:11px;text-transform:uppercase;letter-spacing:.03em}
+table.grid td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top;line-height:1.5}
+table.grid tr:last-child td{border-bottom:none}
+.ok-note{margin:12px 0;padding:10px 12px;border-radius:6px;background:var(--chip);border-left:3px solid var(--ok);color:var(--ink);font-size:13px;line-height:1.5}
+#view-pwdrestrict .missing{margin-left:0;font-weight:400;line-height:1.55;padding:11px 13px}
+#view-pwdrestrict .missing b{font-weight:700}
+#view-pwdrestrict .area{padding:12px 14px}
+.wordlist{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 4px;max-height:320px;overflow:auto}
+.wordlist .word{font-family:Consolas,"Cascadia Mono",monospace;font-size:12px;padding:2px 7px;border-radius:4px;background:var(--chip);border:1px solid var(--line);white-space:nowrap}
 .tblbar input[type=search]{flex:1 1 280px;min-width:200px;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink)}
 .days{font-variant-numeric:tabular-nums;white-space:nowrap}
 .lhuser{background:var(--card);border:1px solid var(--line);border-radius:8px;margin-bottom:10px;padding:12px 14px;display:flex;flex-wrap:wrap;gap:18px}
@@ -2212,6 +2686,10 @@ if (-not $SkipPrivilegedGroups) {
 $lrCount = if ($logonScan) { $logonScan.Rows.Count } else { '&ndash;' }
 A ("<a class='nav' data-view='logon' href='#'>Logon restrictions<span class='n'>{0}</span></a>" -f $lrCount)
 
+$prCount = '&ndash;'
+if ($pwdRestrict.Checked) { $prCount = @($pwdRestrict.Filters | Where-Object { $_.Custom }).Count }
+A ("<a class='nav' data-view='pwdrestrict' href='#'>Password restrictions<span class='n'>{0}</span></a>" -f $prCount)
+
 A '<div class="grouplbl">Inventory</div>'
 A ("<a class='nav' data-view='gpos' href='#'>All GPOs<span class='n'>{0}</span></a>" -f $records.Count)
 A ("<a class='nav' data-view='scope' href='#'>Scope index<span class='n'>{0}</span></a>" -f @($flatScope | Where-Object { $_.SOMPath -ne '(not linked)' }).Count)
@@ -2427,6 +2905,167 @@ else {
             A '</div>'
         }
         A '</div>'
+    }
+}
+A '</section>'
+
+# ================================================ VIEW: PASSWORD RESTRICTIONS
+A '<section class="view" id="view-pwdrestrict">'
+A '<h1>Password restrictions</h1>'
+A '<div class="sub">What restricts the <b>content</b> of a password in this domain &ndash; banned words, dictionaries, breached-password checks &ndash; as opposed to its length and age, which are on Focus area A. In Active Directory these are never Group Policy settings: they are password filter DLLs registered with the LSA and loaded by every domain controller on each password change.</div>'
+
+if (-not $pwdRestrict.Checked) {
+    A ("<div class='missing'><b>NOT CHECKED.</b> The registry on the domain controller could not be read, so this section cannot say whether a password filter is installed. Absence below is not evidence that none exists.{0}<br><br>Run the report on a domain controller, or with an account that can read the remote registry on one.</div>" -f `
+        $(if ($pwdRestrict.Error) { '<br><br><span class="mono">' + (HtmlEnc $pwdRestrict.Error) + '</span>' } else { '' }))
+}
+else {
+    $customF = @($pwdRestrict.Filters | Where-Object { $_.Custom })
+    $applyingGpoHits = @($pwdRestrict.GpoHits | Where-Object { $_.Applying })
+
+    A '<div class="stats">'
+    A ("<div class='stat'><b>{0}</b><span>Products detected</span></div>" -f @($pwdRestrict.Products).Count)
+    A ("<div class='stat'><b>{0}</b><span>Filters registered</span></div>" -f @($pwdRestrict.Filters).Count)
+    A ("<div class='stat'><b>{0}</b><span>Word lists readable</span></div>" -f @($pwdRestrict.WordLists).Count)
+    A ("<div class='stat'><b>{0}</b><span>Related GPO settings</span></div>" -f $applyingGpoHits.Count)
+    A ("<div class='stat'><b>{0}</b><span>Fine-grained policies</span></div>" -f @($psos).Count)
+    A '</div>'
+
+    if ($customF.Count -eq 0 -and $applyingGpoHits.Count -eq 0 -and @($pwdRestrict.Products).Count -eq 0) {
+        A '<div class="missing"><b>No customization found.</b> Only the standard Windows filters are registered on this domain controller, and no applying GPO configures a third-party password product. That means the <i>only</i> restriction on password content is the built-in complexity rule described below &ndash; there is no banned word list, no dictionary check and no breached-password screening in this domain.</div>'
+    }
+    else {
+        A ("<div class='ok-note'><b>Customization is in force.</b> {0} password-restriction product(s) and {1} non-default filter(s) were detected on this domain controller. What each one enforces is below; anything it holds in an encrypted or proprietary store has to be exported from that product for the committee packet.</div>" -f `
+            @($pwdRestrict.Products).Count, $customF.Count)
+    }
+
+    # ---- detected products
+    A '<h2>Password restriction products detected</h2>'
+    A '<div class="sub">Each product is looked for four ways &ndash; the filter DLL registered with the LSA, its own registry key, its Windows service, and (for Entra) its DC agent event log. Any one is enough, so a renamed or undocumented DLL does not produce a false negative. The <b>Detected by</b> column shows which signals actually fired.</div>'
+    if (@($pwdRestrict.Products).Count -eq 0) {
+        A '<div class="missing">None of the known password-restriction products were detected: Microsoft Entra Password Protection, Enzoic for Active Directory, Specops Password Policy, Lithnet Password Protection, PassFiltEx, nFront, Netwrix/Anixis Password Policy Enforcer, ManageEngine ADSelfService Plus, Safepass.me or OpenPasswordFilter.</div>'
+        if (-not $pwdRestrict.ServicesRead) {
+            A '<div class="hint" style="margin-left:0">Note: the service list could not be read, so detection relied on the registry alone.</div>'
+        }
+    }
+    else {
+        A '<table class="grid"><thead><tr><th style="width:19%">Product</th><th style="width:12%">Vendor</th><th style="width:13%">Mode</th><th style="width:22%">Detected by</th><th>What it restricts / where the word list lives</th></tr></thead><tbody>'
+        foreach ($pd in $pwdRestrict.Products) {
+            $modeCell = '<span class="mut">&ndash;</span>'
+            if ($pd.Mode) {
+                $cls = if ($pd.Mode -like 'Enforced*') { 'badge ok' } elseif ($pd.Mode -like 'Audit*' -or $pd.Mode -eq 'Disabled') { 'badge bad' } else { 'badge' }
+                $modeCell = ("<span class='{0}'>{1}</span>" -f $cls, (HtmlEnc $pd.Mode))
+            }
+            A ("<tr><td><b>{0}</b></td><td>{1}</td><td>{2}</td><td>{3}</td><td>{4}<div class='hint' style='margin:6px 0 0'>{5}</div></td></tr>" -f `
+                (HtmlEnc $pd.Product), (HtmlEnc $pd.Vendor), $modeCell, `
+                (($pd.DetectedBy | ForEach-Object { HtmlEnc $_ }) -join '<br>'), `
+                (HtmlEnc $pd.Notes), (HtmlEnc $pd.WordList))
+        }
+        A '</tbody></table>'
+        if ($null -ne $pwdRestrict.EntraMode -and $pwdRestrict.EntraMode.AuditOnly -eq $true) {
+            A '<div class="missing" style="margin-top:10px"><b>Entra Password Protection is in AUDIT ONLY mode.</b> Weak and banned passwords are logged but <i>accepted</i>. Nothing is being blocked. Switch the tenant policy to Enforced once the audit period has been reviewed.</div>'
+        }
+    }
+
+    # ---- registered filters
+    A '<h2>Password filters registered on the domain controller</h2>'
+    A ("<div class='sub'>Read from <span class='mono'>HKLM\SYSTEM\CurrentControlSet\Control\Lsa\Notification Packages</span> &mdash; {0}.</div>" -f (HtmlEnc $pwdRestrict.Source))
+    if (@($pwdRestrict.Filters).Count -eq 0) {
+        A '<div class="missing">No notification packages are registered at all. That is unusual on a domain controller &ndash; even the Windows default (<span class="mono">scecli</span>) is normally present. Verify the value directly.</div>'
+    }
+    else {
+        A '<table class="grid"><thead><tr><th style="width:15%">DLL</th><th style="width:22%">Product</th><th style="width:11%">Restricts content?</th><th>What it enforces</th></tr></thead><tbody>'
+        foreach ($f in $pwdRestrict.Filters) {
+            $bad = if (-not $f.Known) { ' badge bad' } elseif ($f.Custom) { ' badge ok' } else { ' badge' }
+            A ("<tr><td class='mono'>{0}</td><td>{1}</td><td><span class='{2}'>{3}</span></td><td>{4}</td></tr>" -f `
+                (HtmlEnc $f.Dll), (HtmlEnc $f.Product), $bad.Trim(), `
+                $(if ($f.Custom) { 'Yes' } else { 'No' }), (HtmlEnc $f.Notes))
+        }
+        A '</tbody></table>'
+    }
+
+    # ---- word lists
+    if (@($pwdRestrict.WordLists).Count -gt 0) {
+        A '<h2>Banned / restricted word lists</h2>'
+        foreach ($wl in $pwdRestrict.WordLists) {
+            A '<div class="area">'
+            A ("<h3 style='font-size:14px'>{0} <span class='badge'>{1} entries</span></h3>" -f (HtmlEnc $wl.Product), $wl.Count)
+            A ("<div class='hint' style='margin-left:0'><span class='mono'>{0}</span></div>" -f (HtmlEnc $wl.Path))
+            A '<div class="wordlist">'
+            foreach ($w in $wl.Words) { A ("<span class='word'>{0}</span>" -f (HtmlEnc $w)) }
+            A '</div>'
+            if ($wl.Truncated) {
+                A ("<div class='hint' style='margin-left:0'>Showing the first 250 of {0}. The full list is in the file above.</div>" -f $wl.Count)
+            }
+            A '</div>'
+        }
+    }
+    elseif (@($pwdRestrict.Products).Count -gt 0) {
+        A '<h2>Banned / restricted word lists</h2>'
+        A '<div class="missing">A password-restriction product is in place, but its word list is not stored as a readable file on this domain controller. Entra keeps the tenant custom banned list encrypted in SYSVOL; Enzoic stores its settings in Active Directory; Specops, nFront, Netwrix/Anixis and Lithnet keep theirs in their own stores. <b>Export the list from that product</b> and attach it to the committee packet &ndash; an examiner asking "what words are banned?" wants the list, not the fact that one exists. Where to get it, per product, is in the table above.</div>'
+    }
+
+    # ---- product configuration
+    if (@($pwdRestrict.ProductKeys).Count -gt 0) {
+        A '<h2>Product configuration</h2>'
+        foreach ($pk in $pwdRestrict.ProductKeys) {
+            A '<div class="area">'
+            A ("<h3 style='font-size:14px'>{0}</h3>" -f (HtmlEnc $pk.Product))
+            A ("<div class='hint' style='margin-left:0'><span class='mono'>{0}</span></div>" -f (HtmlEnc $pk.Path))
+            A '<table class="grid"><thead><tr><th style="width:34%">Setting</th><th>Value</th></tr></thead><tbody>'
+            foreach ($v in $pk.Values) {
+                A ("<tr><td class='mono'>{0}</td><td class='mono'>{1}</td></tr>" -f (HtmlEnc $v.Name), (HtmlEnc $v.Value))
+            }
+            A '</tbody></table>'
+            A '</div>'
+        }
+    }
+
+    # ---- GPO-side evidence
+    A '<h2>Group Policy settings that reference password content</h2>'
+    A '<div class="sub">Settings whose container, name or value mentions a banned or prohibited word list, a dictionary, a passphrase rule, a breached-password check, or a known third-party password product.</div>'
+    if (@($pwdRestrict.GpoHits).Count -eq 0) {
+        A '<div class="missing">No Group Policy setting in this domain references any of these. If you run Specops, nFront, Netwrix/Anixis or Lithnet, their settings live in their own ADMX namespace &ndash; confirm the GPO is linked and applying.</div>'
+    }
+    else {
+        A '<table class="grid"><thead><tr><th style="width:20%">GPO</th><th style="width:9%">Applying</th><th style="width:24%">Container</th><th style="width:22%">Setting</th><th>Value</th></tr></thead><tbody>'
+        foreach ($g in @($pwdRestrict.GpoHits | Sort-Object { -[int][bool]$_.Applying }, Gpo, Name)) {
+            A ("<tr><td><a href='#' onclick=""return gotoGpo('{0}')"">{1}</a></td><td>{2}</td><td class='mono'>{3}</td><td>{4}</td><td class='mono'>{5}</td></tr>" -f `
+                $g.Anchor, (HtmlEnc $g.Gpo), `
+                $(if ($g.Applying) { '<span class="badge ok">Yes</span>' } else { '<span class="badge warn">No</span>' }), `
+                (HtmlEnc $g.Container), (HtmlEnc $g.Name), (HtmlEnc $g.Value))
+        }
+        A '</tbody></table>'
+    }
+
+    # ---- what the built-in rule actually does
+    A '<h2>The built-in complexity rule</h2>'
+    $cxHits = @($focus['pwd'] | Where-Object { $_.Applying -and ($_.Name -match 'PasswordComplexity|complexity requirements') })
+    if ($cxHits.Count -gt 0) {
+        A '<table class="grid"><thead><tr><th style="width:26%">GPO</th><th style="width:34%">Setting</th><th>Value</th></tr></thead><tbody>'
+        foreach ($c in $cxHits) {
+            A ("<tr><td>{0}</td><td>{1}</td><td class='mono'>{2}</td></tr>" -f (HtmlEnc $c.Gpo), (HtmlEnc $c.Name), (HtmlEnc $c.Value))
+        }
+        A '</tbody></table>'
+    }
+    else {
+        A '<div class="missing">No applying GPO sets "Password must meet complexity requirements". Without it, and without a custom filter, <b>nothing restricts what a password contains</b> in this domain.</div>'
+    }
+    A '<div class="hint" style="margin-left:0">When complexity is enabled, Windows itself rejects a password that contains the account&rsquo;s sAMAccountName, or any three-or-more character token of the display name, and requires characters from three of the five categories (uppercase, lowercase, digit, symbol, Unicode). That is the full extent of the built-in content restriction &ndash; it has no configurable word list, it does not check a dictionary, and it does not know whether the password has been breached.</div>'
+
+    # ---- PSO cross-reference
+    A '<h2>Fine-grained password policies</h2>'
+    if (@($psos).Count -eq 0) {
+        A '<div class="missing">None defined. Every account is governed by the domain password policy.</div>'
+    }
+    else {
+        A ("<div class='sub'>{0} fine-grained policy(ies) are defined &ndash; these set length, age, history and lockout for specific groups, but like the domain policy they cannot ban specific words. Full detail is on <a href='#' onclick=""return show('focus'),false"">Focus area A</a>.</div>" -f @($psos).Count)
+        A '<table class="grid"><thead><tr><th>Policy</th><th>Precedence</th><th>Min length</th><th>Complexity</th><th>Applies to</th></tr></thead><tbody>'
+        foreach ($ps in @($psos | Sort-Object Precedence)) {
+            A ("<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3}</td><td>{4}</td></tr>" -f `
+                (HtmlEnc $ps.Name), (HtmlEnc $ps.Precedence), (HtmlEnc $ps.MinLength), `
+                $(if ($ps.Complexity) { 'Enabled' } else { '<span class="badge bad">Disabled</span>' }), (HtmlEnc $ps.AppliesTo))
+        }
+        A '</tbody></table>'
     }
 }
 A '</section>'
@@ -2778,6 +3417,35 @@ if (-not $NoCsv) {
         $cleanup.StaleComputers | Select-Object Name, OU, Enabled, OS, LastLogon, DaysIdle, PwdLastSet, Created, Description |
             Export-Csv -Path (Join-Path $reportDir 'Cleanup-StaleComputers.csv') -NoTypeInformation -Encoding UTF8
     }
+    if (@($pwdRestrict.Products).Count -gt 0) {
+        $pwdRestrict.Products |
+            Select-Object Product, Vendor,
+                @{ n = 'Mode';       e = { $_.Mode } },
+                @{ n = 'DetectedBy'; e = { ($_.DetectedBy -join '; ') } },
+                @{ n = 'WordList';   e = { $_.WordList } },
+                @{ n = 'Enforces';   e = { $_.Notes } } |
+            Export-Csv -Path (Join-Path $reportDir 'PasswordProducts.csv') -NoTypeInformation -Encoding UTF8
+    }
+    if ($pwdRestrict.Checked -and @($pwdRestrict.Filters).Count -gt 0) {
+        $pwdRestrict.Filters |
+            Select-Object Dll, Product,
+                @{ n = 'RestrictsContent'; e = { $(if ($_.Custom) { 'Yes' } else { 'No' }) } },
+                @{ n = 'Recognised';       e = { $(if ($_.Known)  { 'Yes' } else { 'No' }) } },
+                @{ n = 'Enforces';         e = { $_.Notes } },
+                @{ n = 'ReadFrom';         e = { $pwdRestrict.Source } } |
+            Export-Csv -Path (Join-Path $reportDir 'PasswordFilters.csv') -NoTypeInformation -Encoding UTF8
+    }
+    if (@($pwdRestrict.WordLists).Count -gt 0) {
+        $wlRows = @()
+        foreach ($wl in $pwdRestrict.WordLists) {
+            foreach ($w in $wl.Words) {
+                $wlRows += [pscustomobject]@{ Product = $wl.Product; Source = $wl.Path; Word = $w }
+            }
+        }
+        if ($wlRows.Count -gt 0) {
+            $wlRows | Export-Csv -Path (Join-Path $reportDir 'PasswordBannedWords.csv') -NoTypeInformation -Encoding UTF8
+        }
+    }
 }
 
 
@@ -2810,6 +3478,45 @@ if (-not $SkipCommitteeReport) {
         $snapPriv[$pg.Label] = @(@($pg.Members) | ForEach-Object { $_.Sam } | Sort-Object)
     }
 
+    # Every setting inside a reviewed control area, recorded individually so the
+    # next run can say exactly which one changed and what it changed to.
+    # at = area key, g = GPO, s = side, c = container, n = setting name, v = value
+    $snapSettings = @()
+    foreach ($fa in $script:FocusAreas) {
+        foreach ($h in @($focus[$fa.Key] | Where-Object { $_.Applying })) {
+            $snapSettings += [pscustomobject]@{
+                at = $fa.Key
+                a  = $fa.Key
+                g  = [string]$h.Gpo
+                s  = [string]$h.Side
+                c  = [string]$h.Container
+                n  = [string]$h.Name
+                v  = [string]$h.Value
+            }
+        }
+    }
+
+    # password filters registered on the DC - a filter appearing or disappearing
+    # is a material change, so it rides in the snapshot alongside the settings
+    $snapPwdFilters  = @()
+    $snapPwdProducts = @()
+    if ($pwdRestrict.Checked) {
+        $snapPwdFilters = @(@($pwdRestrict.Filters) | ForEach-Object { "$($_.Dll)" } | Sort-Object)
+        # products are kept name + mode, so a drop into audit mode reads as one
+        # "mode changed" row rather than a removal plus an addition
+        foreach ($pd in @($pwdRestrict.Products)) {
+            $snapPwdProducts += [pscustomobject]@{ p = [string]$pd.Product; m = [string]$pd.Mode }
+        }
+        $snapPwdProducts = @($snapPwdProducts | Sort-Object { $_.p })
+    }
+
+    $snapUsers = @()
+    $snapComps = @()
+    if (-not $SkipUserDrift -and $cleanup.Checked) {
+        $snapUsers = @($cleanup.RosterUsers)
+        $snapComps = @($cleanup.RosterComputers)
+    }
+
     $snapshot = [pscustomobject]@{
         Generated      = (Get-Date -Format 'o')
         Domain         = $Domain
@@ -2819,8 +3526,16 @@ if (-not $SkipCommitteeReport) {
         Gpos           = $records.Count
         Settings       = $totalSettings
         Unlinked       = $unlinked.Count
+        DriftDays      = $DriftDays
         Focus          = $snapFocus
         Privileged     = $snapPriv
+        FocusSettings  = $snapSettings
+        PwdFilters     = $snapPwdFilters
+        PwdProducts    = $snapPwdProducts
+        PwdChecked     = $pwdRestrict.Checked
+        Users          = $snapUsers
+        Computers      = $snapComps
+        UserDrift      = (-not $SkipUserDrift -and $cleanup.Checked)
         CleanupChecked = $cleanup.Checked
         Disabled       = $cleanup.Disabled.Count
         StaleUsers     = $cleanup.StaleUsers.Count
@@ -2829,72 +3544,344 @@ if (-not $SkipCommitteeReport) {
         LogonRestricted = $(if ($logonScan) { @($logonScan.Rows).Count } else { 0 })
     }
 
-    # ------------------------------------------- previous run, if any -------
-    $prev     = $null
-    $prevWhen = $null
+    # ------------------------------------ baseline: the state N days ago ----
+    # Drift is measured against the state as of $DriftDays ago, NOT against the
+    # previous run. Pick the newest snapshot that is at least that old. If none
+    # is that old yet, fall back to the oldest available and say so plainly, so
+    # the committee is never told a 3-day window is a 30-day window.
+    $prev         = $null
+    $prevWhen     = $null
+    $prevFileUsed = $null
+    $driftExact   = $true
+
     try {
-        $prevFile = Get-ChildItem -Path $OutputPath -Directory -Filter 'AD-Report-*' -ErrorAction SilentlyContinue |
-                        Where-Object { $_.FullName -ne (Resolve-Path $reportDir).Path } |
-                        ForEach-Object { Join-Path $_.FullName 'ad-snapshot.json' } |
-                        Where-Object { Test-Path -LiteralPath $_ } |
-                        Sort-Object { (Get-Item $_).LastWriteTime } -Descending |
-                        Select-Object -First 1
-        if ($prevFile) {
-            $prev = Get-Content -LiteralPath $prevFile -Raw | ConvertFrom-Json
-            if ($prev.Domain -ne $Domain) { $prev = $null }
-            else { $prevWhen = [datetime]$prev.Generated }
+        $cutoff  = (Get-Date).AddDays(-$DriftDays)
+        $cands   = @()
+        $thisDir = (Resolve-Path -LiteralPath $reportDir).Path
+
+        foreach ($d in @(Get-ChildItem -Path $OutputPath -Directory -Filter 'AD-Report-*' -ErrorAction SilentlyContinue)) {
+            if ($d.FullName -eq $thisDir) { continue }
+            $f = Join-Path $d.FullName 'ad-snapshot.json'
+            if (-not (Test-Path -LiteralPath $f)) { continue }
+            try {
+                $snap = Get-Content -LiteralPath $f -Raw | ConvertFrom-Json
+                if ((Get-Prop $snap 'Domain') -ne $Domain) { continue }
+                $gen = Get-Prop $snap 'Generated'
+                if (-not $gen) { continue }
+                $cands += [pscustomobject]@{ File = $f; When = [datetime]$gen; Snap = $snap }
+            }
+            catch { }
+        }
+
+        if ($cands.Count -gt 0) {
+            $old = @($cands | Where-Object { $_.When -le $cutoff } | Sort-Object When -Descending)
+            if ($old.Count -gt 0) {
+                $pick = $old[0]
+            }
+            else {
+                $pick = @($cands | Sort-Object When)[0]
+                $driftExact = $false
+            }
+            $prev         = $pick.Snap
+            $prevWhen     = $pick.When
+            $prevFileUsed = $pick.File
         }
     }
-    catch { Write-Warn ("Could not read the previous snapshot: {0}" -f $_.Exception.Message) }
+    catch { Write-Warn ("Could not read a baseline snapshot: {0}" -f $_.Exception.Message) }
+
+    $driftAgeDays = 0
+    if ($prevWhen) { $driftAgeDays = [int][math]::Round(((Get-Date) - $prevWhen).TotalDays) }
 
     # ------------------------------------------------------- the diff -------
-    # Each change is Direction = Better / Worse / Neutral
+    # Item level. Every row below feeds both the HTML tables and Drift-Changes.csv.
+
+    function New-Diff {
+        param([string]$Scope, [string]$Item, [string]$Change, [string]$Was, [string]$Now, [string]$Detail = '')
+        [pscustomobject]@{ Scope = $Scope; Item = $Item; Change = $Change; Was = $Was; Now = $Now; Detail = $Detail }
+    }
+
+    # Change label -> CSS class. Keeps the colouring consistent across the tables.
+    function Get-DriftClass {
+        param([string]$Change)
+        switch -Regex ($Change) {
+            '^(Added|Account created|Joined)'          { return 'Added' }
+            '^(Removed|Account deleted)'               { return 'Removed' }
+            '^(Disabled)'                              { return 'Removed' }
+            '^(Re-enabled)'                            { return 'Added' }
+            default                                    { return 'Modified' }
+        }
+    }
+
+    $areaRows = @()   # one row per control area: changed, or confirmed unchanged
+    $setRows  = @()   # setting-level added / removed / modified
+    $privRows = @()   # privileged group membership movement
+    $userRows = @()   # user account movement
+    $compRows = @()   # computer account movement
+
+    # the directional headline list, kept for the summary bullets
     $changes = @()
     function Add-Change { param([string]$Dir, [string]$Text) $script:changes += [pscustomobject]@{ Dir = $Dir; Text = $Text } }
 
+    # was the baseline able to report per-account detail?
+    $prevUserDrift = $false
+    if ($prev) {
+        $pud = Get-Prop $prev 'UserDrift'
+        $prevUserDrift = ($null -ne $pud -and [bool]$pud)
+    }
+    $userDriftOn = ((-not $SkipUserDrift) -and $cleanup.Checked -and $prevUserDrift)
+
     if ($prev) {
 
+        # ---- control areas: one row each, changed or unchanged -------------
+        $prevFocus = Get-Prop $prev 'Focus'
         foreach ($fa in $script:FocusAreas) {
-            $nowOn = $snapFocus[$fa.Key].Configured
-            $was   = $prev.Focus.($fa.Key)
-            if ($null -eq $was) { continue }
-            if ($nowOn -and -not $was.Configured) { Add-Change 'Better' ("{0}: now configured by an applying GPO (was not configured)" -f $fa.Title) }
-            elseif (-not $nowOn -and $was.Configured) { Add-Change 'Worse' ("{0}: NO LONGER configured by any applying GPO" -f $fa.Title) }
-            elseif ($nowOn -and ($snapFocus[$fa.Key].Settings -ne $was.Settings)) {
-                Add-Change 'Neutral' ("{0}: setting count changed from {1} to {2}" -f $fa.Title, $was.Settings, $snapFocus[$fa.Key].Settings)
+            $nowS = $snapFocus[$fa.Key]
+            $wasS = Get-Prop $prevFocus $fa.Key
+
+            $nowTxt = $(if ($nowS.Configured) { ('Configured - {0} setting(s)' -f $nowS.Settings) } else { 'Not configured' })
+            $wasTxt = 'Not measured'
+            if ($null -ne $wasS) {
+                $wasTxt = $(if ($wasS.Configured) { ('Configured - {0} setting(s)' -f $wasS.Settings) } else { 'Not configured' })
+            }
+
+            $chg = 'No change'
+            if ($null -eq $wasS) { $chg = 'First measurement' }
+            elseif ($nowS.Configured -and -not $wasS.Configured) {
+                $chg = 'Now configured'
+                Add-Change 'Better' ("{0}: now configured by an applying GPO (was not configured)" -f $fa.Title)
+            }
+            elseif (-not $nowS.Configured -and $wasS.Configured) {
+                $chg = 'NO LONGER configured'
+                Add-Change 'Worse' ("{0}: NO LONGER configured by any applying GPO" -f $fa.Title)
+            }
+            elseif ($nowS.Settings -ne $wasS.Settings) { $chg = 'Settings changed' }
+
+            $areaRows += [pscustomobject]@{
+                Key = $fa.Key; Letter = $fa.Letter; Title = $fa.Title
+                Was = $wasTxt; Now = $nowTxt; Change = $chg
             }
         }
 
-        foreach ($lbl in ($snapPriv.Keys | Sort-Object)) {
-            $nowM = @($snapPriv[$lbl])
-            $wasM = @()
-            if ($prev.Privileged -and $prev.Privileged.PSObject.Properties[$lbl]) { $wasM = @($prev.Privileged.$lbl) }
-            $added   = @($nowM | Where-Object { $wasM -notcontains $_ })
-            $removed = @($wasM | Where-Object { $nowM -notcontains $_ })
-            if ($added.Count   -gt 0) { Add-Change 'Worse'  ("{0}: added {1}" -f $lbl, ($added -join ', ')) }
-            if ($removed.Count -gt 0) { Add-Change 'Better' ("{0}: removed {1}" -f $lbl, ($removed -join ', ')) }
+        # ---- setting level -------------------------------------------------
+        $prevSet = @(Get-Prop $prev 'FocusSettings')
+        $setComparable = ($prevSet.Count -gt 0)
+
+        $nowMap = @{}
+        foreach ($o in @($snapSettings)) {
+            $k = ('{0}|{1}|{2}|{3}|{4}' -f $o.at, $o.g, $o.s, $o.c, $o.n)
+            $nowMap[$k] = $o
+        }
+        $wasMap = @{}
+        foreach ($o in $prevSet) {
+            $ka = Get-Prop $o 'at'; if (-not $ka) { $ka = Get-Prop $o 'a' }
+            $k = ('{0}|{1}|{2}|{3}|{4}' -f $ka, (Get-Prop $o 'g'), (Get-Prop $o 's'), (Get-Prop $o 'c'), (Get-Prop $o 'n'))
+            $wasMap[$k] = [pscustomobject]@{
+                at = [string]$ka; g = [string](Get-Prop $o 'g'); s = [string](Get-Prop $o 's')
+                c  = [string](Get-Prop $o 'c'); n = [string](Get-Prop $o 'n'); v = [string](Get-Prop $o 'v')
+            }
         }
 
-        if ($cleanup.Checked -and $prev.CleanupChecked) {
+        if ($setComparable) {
+            foreach ($k in @($nowMap.Keys | Sort-Object)) {
+                $n = $nowMap[$k]
+                if (-not $wasMap.ContainsKey($k)) {
+                    $setRows += New-Diff $n.at $n.n 'Added' '(not set)' $n.v $n.g
+                }
+                elseif ("$($wasMap[$k].v)" -ne "$($n.v)") {
+                    $setRows += New-Diff $n.at $n.n 'Modified' "$($wasMap[$k].v)" "$($n.v)" $n.g
+                }
+            }
+            foreach ($k in @($wasMap.Keys | Sort-Object)) {
+                if (-not $nowMap.ContainsKey($k)) {
+                    $w = $wasMap[$k]
+                    $setRows += New-Diff $w.at $w.n 'Removed' "$($w.v)" '(not set)' $w.g
+                }
+            }
+        }
+
+        # ---- password filters ----------------------------------------------
+        # Reported as setting rows so they land in table 2 with everything else.
+        if ($pwdRestrict.Checked -and (Get-Prop $prev 'PwdChecked')) {
+            $nowF = @($snapPwdFilters)
+            $wasF = @(Get-Prop $prev 'PwdFilters')
+            foreach ($f in @($nowF | Where-Object { $wasF -notcontains $_ } | Sort-Object)) {
+                $setRows += New-Diff 'pwd' ('Password filter: ' + $f) 'Added' '(not registered)' 'Registered with the LSA' 'LSA Notification Packages'
+                Add-Change 'Neutral' ("Password filter registered: {0}" -f $f)
+            }
+            foreach ($f in @($wasF | Where-Object { $nowF -notcontains $_ } | Sort-Object)) {
+                $setRows += New-Diff 'pwd' ('Password filter: ' + $f) 'Removed' 'Registered with the LSA' '(no longer registered)' 'LSA Notification Packages'
+                Add-Change 'Worse' ("Password filter NO LONGER registered: {0}" -f $f)
+            }
+
+            # products, compared by name so a mode change is one row
+            $nowP = @{}; foreach ($x in @($snapPwdProducts)) { $nowP["$($x.p)"] = "$($x.m)" }
+            $wasP = @{}
+            foreach ($x in @(Get-Prop $prev 'PwdProducts')) {
+                $pn = Get-Prop $x 'p'
+                if ($pn) { $wasP["$pn"] = [string](Get-Prop $x 'm') }
+            }
+            foreach ($k in @($nowP.Keys | Sort-Object)) {
+                if (-not $wasP.ContainsKey($k)) {
+                    $setRows += New-Diff 'pwd' ('Password restriction product: ' + $k) 'Added' '(not present)' `
+                        $(if ($nowP[$k]) { $nowP[$k] } else { 'Present' }) 'Password restriction products'
+                    Add-Change 'Better' ("Password restriction product added: {0}" -f $k)
+                }
+                elseif ($wasP[$k] -ne $nowP[$k]) {
+                    $setRows += New-Diff 'pwd' ('Password restriction product: ' + $k) 'Modified' `
+                        $(if ($wasP[$k]) { $wasP[$k] } else { 'Present' }) `
+                        $(if ($nowP[$k]) { $nowP[$k] } else { 'Present' }) 'Enforcement mode changed'
+                    $dir = $(if ($nowP[$k] -like 'Enforced*') { 'Better' } else { 'Worse' })
+                    Add-Change $dir ("{0}: mode changed from {1} to {2}" -f $k, $wasP[$k], $nowP[$k])
+                }
+            }
+            foreach ($k in @($wasP.Keys | Sort-Object)) {
+                if (-not $nowP.ContainsKey($k)) {
+                    $setRows += New-Diff 'pwd' ('Password restriction product: ' + $k) 'Removed' `
+                        $(if ($wasP[$k]) { $wasP[$k] } else { 'Present' }) '(no longer present)' 'Password restriction products'
+                    Add-Change 'Worse' ("Password restriction product REMOVED: {0}" -f $k)
+                }
+            }
+        }
+
+        # A control area can keep the same number of settings while the values
+        # underneath change, so the area row is corrected from the setting diff.
+        if ($setComparable) {
+            foreach ($ar in $areaRows) {
+                $n = @($setRows | Where-Object { $_.Scope -eq $ar.Key }).Count
+                if ($n -eq 0) { continue }
+                if ($ar.Change -eq 'No change' -or $ar.Change -eq 'Settings changed') {
+                    $ar.Change = ('{0} setting(s) changed' -f $n)
+                }
+            }
+        }
+
+
+        # ---- privileged group membership -----------------------------------
+        $prevPriv = Get-Prop $prev 'Privileged'
+        foreach ($lbl in @($snapPriv.Keys | Sort-Object)) {
+            $nowM = @($snapPriv[$lbl])
+            $wasM = @(Get-Prop $prevPriv $lbl)
+            $addedM   = @($nowM | Where-Object { $wasM -notcontains $_ } | Sort-Object)
+            $removedM = @($wasM | Where-Object { $nowM -notcontains $_ } | Sort-Object)
+            foreach ($m in $addedM)   { $privRows += New-Diff $lbl $m 'Added to group'     'Not a member' 'Member' }
+            foreach ($m in $removedM) { $privRows += New-Diff $lbl $m 'Removed from group' 'Member'       'Not a member' }
+            if ($addedM.Count   -gt 0) { Add-Change 'Worse'  ("{0}: added {1}" -f $lbl, ($addedM -join ', ')) }
+            if ($removedM.Count -gt 0) { Add-Change 'Better' ("{0}: removed {1}" -f $lbl, ($removedM -join ', ')) }
+        }
+
+        # ---- user accounts -------------------------------------------------
+        if ($userDriftOn) {
+            $nowU = @{}
+            foreach ($u in @($snapUsers)) { if ($u.s) { $nowU["$($u.s)"] = $u } }
+            $wasU = @{}
+            foreach ($u in @(Get-Prop $prev 'Users')) {
+                $s = Get-Prop $u 's'
+                if (-not $s) { continue }
+                $wasU["$s"] = [pscustomobject]@{
+                    s = [string]$s; n = [string](Get-Prop $u 'n')
+                    e = [bool](Get-Prop $u 'e'); p = [bool](Get-Prop $u 'p')
+                    x = [string](Get-Prop $u 'x'); o = [string](Get-Prop $u 'o')
+                }
+            }
+
+            foreach ($k in @($nowU.Keys | Sort-Object)) {
+                $n = $nowU[$k]
+                if (-not $wasU.ContainsKey($k)) {
+                    $userRows += New-Diff 'User' $k 'Account created' '(did not exist)' `
+                        $(if ($n.e) { 'Enabled' } else { 'Disabled' }) ([string]$n.n)
+                    continue
+                }
+                $w = $wasU[$k]
+                if ([bool]$w.e -ne [bool]$n.e) {
+                    $userRows += New-Diff 'User' $k $(if ($n.e) { 'Re-enabled' } else { 'Disabled' }) `
+                        $(if ($w.e) { 'Enabled' } else { 'Disabled' }) $(if ($n.e) { 'Enabled' } else { 'Disabled' }) ([string]$n.n)
+                }
+                if ([bool]$w.p -ne [bool]$n.p) {
+                    $userRows += New-Diff 'User' $k 'Password never expires' `
+                        $(if ($w.p) { 'Yes' } else { 'No' }) $(if ($n.p) { 'Yes' } else { 'No' }) ([string]$n.n)
+                }
+                if ("$($w.o)" -ne "$($n.o)") {
+                    $userRows += New-Diff 'User' $k 'Moved' "$($w.o)" "$($n.o)" ([string]$n.n)
+                }
+                if ("$($w.x)" -ne "$($n.x)") {
+                    $userRows += New-Diff 'User' $k 'Account expiry changed' `
+                        $(if ($w.x) { "$($w.x)" } else { 'None' }) $(if ($n.x) { "$($n.x)" } else { 'None' }) ([string]$n.n)
+                }
+            }
+            foreach ($k in @($wasU.Keys | Sort-Object)) {
+                if (-not $nowU.ContainsKey($k)) {
+                    $w = $wasU[$k]
+                    $userRows += New-Diff 'User' $k 'Account deleted' `
+                        $(if ($w.e) { 'Enabled' } else { 'Disabled' }) '(no longer present)' ([string]$w.n)
+                }
+            }
+
+            # ---- computer accounts ----------------------------------------
+            $nowC = @{}
+            foreach ($c in @($snapComps)) { if ($c.s) { $nowC["$($c.s)"] = $c } }
+            $wasC = @{}
+            foreach ($c in @(Get-Prop $prev 'Computers')) {
+                $s = Get-Prop $c 's'
+                if (-not $s) { continue }
+                $wasC["$s"] = [pscustomobject]@{
+                    s = [string]$s; n = [string](Get-Prop $c 'n')
+                    e = [bool](Get-Prop $c 'e'); o = [string](Get-Prop $c 'o')
+                }
+            }
+
+            foreach ($k in @($nowC.Keys | Sort-Object)) {
+                $n = $nowC[$k]
+                if (-not $wasC.ContainsKey($k)) {
+                    $compRows += New-Diff 'Computer' $k 'Joined the domain' '(did not exist)' `
+                        $(if ($n.e) { 'Enabled' } else { 'Disabled' }) ([string]$n.o)
+                    continue
+                }
+                $w = $wasC[$k]
+                if ([bool]$w.e -ne [bool]$n.e) {
+                    $compRows += New-Diff 'Computer' $k $(if ($n.e) { 'Re-enabled' } else { 'Disabled' }) `
+                        $(if ($w.e) { 'Enabled' } else { 'Disabled' }) $(if ($n.e) { 'Enabled' } else { 'Disabled' }) ([string]$n.o)
+                }
+                if ("$($w.o)" -ne "$($n.o)") {
+                    $compRows += New-Diff 'Computer' $k 'Moved' "$($w.o)" "$($n.o)" ([string]$n.o)
+                }
+            }
+            foreach ($k in @($wasC.Keys | Sort-Object)) {
+                if (-not $nowC.ContainsKey($k)) {
+                    $w = $wasC[$k]
+                    $compRows += New-Diff 'Computer' $k 'Removed from the domain' `
+                        $(if ($w.e) { 'Enabled' } else { 'Disabled' }) '(no longer present)' ([string]$w.o)
+                }
+            }
+        }
+
+        # ---- directional headlines on the hygiene counts -------------------
+        if ($cleanup.Checked -and (Get-Prop $prev 'CleanupChecked')) {
             foreach ($m in @(
-                @{ n = 'Disabled accounts';  now = $cleanup.Disabled.Count;       was = $prev.Disabled }
-                @{ n = 'Stale users';        now = $cleanup.StaleUsers.Count;     was = $prev.StaleUsers }
-                @{ n = 'Stale computers';    now = $cleanup.StaleComputers.Count; was = $prev.StaleComputers }
+                @{ n = 'Disabled accounts';  now = $cleanup.Disabled.Count;       was = [int](Get-Prop $prev 'Disabled') }
+                @{ n = 'Stale users';        now = $cleanup.StaleUsers.Count;     was = [int](Get-Prop $prev 'StaleUsers') }
+                @{ n = 'Stale computers';    now = $cleanup.StaleComputers.Count; was = [int](Get-Prop $prev 'StaleComputers') }
             )) {
                 if ($m.now -ne $m.was) {
-                    $dir = if ($m.now -lt $m.was) { 'Better' } else { 'Worse' }
+                    $dir = $(if ($m.now -lt $m.was) { 'Better' } else { 'Worse' })
                     Add-Change $dir ("{0}: {1} -> {2}" -f $m.n, $m.was, $m.now)
                 }
             }
         }
 
-        if ($records.Count -ne $prev.Gpos)         { Add-Change 'Neutral' ("GPO count: {0} -> {1}" -f $prev.Gpos, $records.Count) }
-        if ($totalSettings -ne $prev.Settings)     { Add-Change 'Neutral' ("Configured settings: {0} -> {1}" -f $prev.Settings, $totalSettings) }
-        if ($unlinked.Count -ne $prev.Unlinked)    {
-            $dir = if ($unlinked.Count -lt $prev.Unlinked) { 'Better' } else { 'Neutral' }
-            Add-Change $dir ("Unlinked GPOs: {0} -> {1}" -f $prev.Unlinked, $unlinked.Count)
+        $prevGpos = [int](Get-Prop $prev 'Gpos')
+        $prevSetC = [int](Get-Prop $prev 'Settings')
+        $prevUnl  = [int](Get-Prop $prev 'Unlinked')
+        if ($records.Count -ne $prevGpos)     { Add-Change 'Neutral' ("GPO count: {0} -> {1}" -f $prevGpos, $records.Count) }
+        if ($totalSettings -ne $prevSetC)     { Add-Change 'Neutral' ("Configured settings: {0} -> {1}" -f $prevSetC, $totalSettings) }
+        if ($unlinked.Count -ne $prevUnl)     {
+            $dir = $(if ($unlinked.Count -lt $prevUnl) { 'Better' } else { 'Neutral' })
+            Add-Change $dir ("Unlinked GPOs: {0} -> {1}" -f $prevUnl, $unlinked.Count)
         }
     }
+
+    $allDiffs   = @($setRows) + @($privRows) + @($userRows) + @($compRows)
+    $totalDrift = $allDiffs.Count
+    $areaChanged = @($areaRows | Where-Object { $_.Change -ne 'No change' }).Count
 
     # -------------------------------------------------------- findings ------
     $findings = @()
@@ -2967,6 +3954,30 @@ if (-not $SkipCommitteeReport) {
         }
     }
 
+    if ($pwdRestrict.Checked) {
+        if ($null -ne $pwdRestrict.EntraMode -and $pwdRestrict.EntraMode.AuditOnly -eq $true) {
+            Add-Finding 'High' 'Entra Password Protection is running in audit-only mode' `
+                'The DC agent reports AuditOnly. Banned and weak passwords are logged but still accepted, so the control is not actually enforcing. Switch the tenant policy to Enforced.' `
+                $script:ControlMap['pwdcontent']
+        }
+        if (@($pwdRestrict.Products).Count -eq 0 -and
+            @($pwdRestrict.GpoHits | Where-Object { $_.Applying }).Count -eq 0) {
+            Add-Finding 'Medium' 'No password content restrictions beyond Windows complexity' `
+                'No password-restriction product was detected on the domain controller, so nothing in this domain blocks a weak-but-compliant password - the institution name, the season and year, or a password already exposed in a public breach. Microsoft Entra Password Protection, Enzoic, Specops or an equivalent adds a banned word list and breached-password screening.' `
+                $script:ControlMap['pwdcontent']
+        }
+        foreach ($uf in @($pwdRestrict.Filters | Where-Object { -not $_.Known })) {
+            Add-Finding 'Medium' ("Unrecognised password filter registered: {0}" -f $uf.Dll) `
+                'This DLL loads into LSASS and sees every password change. Confirm what it is, that it is authorised, and that it is covered by change control and vendor management.' `
+                $script:ControlMap['pwdcontent']
+        }
+    }
+    else {
+        Add-Finding 'Low' 'Password content restrictions were not checked' `
+            'The domain controller registry could not be read, so the report cannot state whether a password filter (banned word list, dictionary, breached-password check) is installed. Re-run on a domain controller, or with an account that can read its registry remotely.' `
+            $script:ControlMap['pwdcontent']
+    }
+
     if ($unlinked.Count -gt 0) {
         Add-Finding 'Low' ("{0} Group Policy Object(s) are not linked anywhere" -f $unlinked.Count) `
             'Unlinked GPOs apply to nothing. Confirm they are intentional and remove those that are obsolete.' `
@@ -2982,6 +3993,14 @@ if (-not $SkipCommitteeReport) {
     # ------------------------------------------------------------ html ------
     $cb = New-Object System.Text.StringBuilder
     function C { param([string]$Text) [void]$cb.AppendLine($Text) }
+
+    # Control references carry several frameworks separated by '|'. Put each on
+    # its own line so the mapping table stays readable in print.
+    function Format-Ref {
+        param([string]$Ref)
+        $parts = @("$Ref".Split('|') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        return (($parts | ForEach-Object { HtmlEnc $_ }) -join '<br>')
+    }
 
     $ccss = @'
 :root{--ink:#111;--mut:#555;--line:#d4d9df;--accent:#0b5fff;--hi:#b91c1c;--med:#b45309;--low:#3f6212;--ok:#15803d;--chip:#f1f4f8}
@@ -3014,6 +4033,18 @@ ul.sum{margin:6px 0 0;padding-left:20px} ul.sum li{margin:5px 0}
 .chg .Better::marker{color:var(--ok)} .chg .Worse::marker{color:var(--hi)}
 .tag{font-weight:700;font-size:11px;letter-spacing:.03em}
 .tag.Better{color:var(--ok)} .tag.Worse{color:var(--hi)} .tag.Neutral{color:var(--mut)}
+.mono{font-family:Consolas,"Courier New",monospace;font-size:11.5px}
+.same{color:var(--ok);font-weight:600}
+.diff{color:var(--hi);font-weight:700}
+.was{color:var(--mut)}
+.now{font-weight:600}
+.chg-Added{color:var(--hi);font-weight:700}
+.chg-Removed{color:var(--ok);font-weight:700}
+.chg-Modified{color:var(--med);font-weight:700}
+.set-Added{color:var(--ok);font-weight:700}
+.set-Removed{color:var(--hi);font-weight:700}
+.set-Modified{color:var(--med);font-weight:700}
+.same-note{background:#f2f9f4;border-left:3px solid var(--ok);padding:9px 12px;font-size:12px;color:#22402c;margin:8px 0}
 .signoff{margin-top:14px;border:1px solid var(--line)}
 .signoff td{height:46px}
 .note{background:var(--chip);border-left:3px solid var(--accent);padding:9px 12px;font-size:12px;color:#333;margin:10px 0}
@@ -3045,7 +4076,8 @@ a{color:var(--accent)}
     C ("<div class='f'><b>Prepared by</b>{0}\{1}</div>" -f (HtmlEnc $env:USERDOMAIN), (HtmlEnc $env:USERNAME))
     C ("<div class='f'><b>Collected from</b>{0}</div>" -f (HtmlEnc $env:COMPUTERNAME))
     C ("<div class='f'><b>Period covered</b>{0}</div>" -f `
-        $(if ($prevWhen) { 'Since ' + $prevWhen.ToString('MMMM d, yyyy') } else { 'Baseline - first review' }))
+        $(if ($prevWhen) { ('{0} to {1} ({2} days)' -f $prevWhen.ToString('MMMM d, yyyy'), (Get-Date -Format 'MMMM d, yyyy'), $driftAgeDays) }
+          else { 'Baseline - first review' }))
     C ("<div class='f'><b>Source</b>{0} v{1}</div>" -f (HtmlEnc $script:ScriptName), (HtmlEnc $script:ScriptVersion))
     C '</div></div>'
 
@@ -3077,47 +4109,196 @@ a{color:var(--accent)}
     else { C ("<li><b>{0} item(s) require management attention</b>, detailed under Open Items below.</li>" -f ($hi + $med)) }
     C '</ul>'
 
-    # ---- change since last review
-    C '<h2>Change since last review</h2>'
+    # ---- configuration drift over the review window
+    C ("<h2>Change over the last {0} days</h2>" -f $(if ($prev) { $driftAgeDays } else { $DriftDays }))
+
     if (-not $prev) {
-        C '<div class="note">This is the first review found in the output location, so there is no prior run to compare against. This report establishes the baseline; the next run will report movement against it.</div>'
-    }
-    elseif ($changes.Count -eq 0) {
-        C ("<div class='note'>No material change since {0}. Control configuration, privileged group membership and account hygiene counts are unchanged.</div>" -f $prevWhen.ToString('MMMM d, yyyy'))
+        C '<div class="note">No earlier snapshot was found in the output location, so there is nothing to compare against. <b>This report establishes the baseline.</b> Run it again on your review cycle, pointed at the same output folder, and this section will list every item that changed against the state recorded today &ndash; and state plainly which items did not.</div>'
     }
     else {
-        C ("<div class='sub'>Compared against the review of {0}.</div>" -f $prevWhen.ToString('MMMM d, yyyy'))
-        C '<ul class="chg">'
-        foreach ($ch in ($changes | Sort-Object @{ e = { @{ 'Worse' = 0; 'Better' = 1; 'Neutral' = 2 }[$_.Dir] } })) {
-            C ("<li class='{0}'><span class='tag {0}'>{1}</span> &nbsp;{2}</li>" -f $ch.Dir, $ch.Dir.ToUpper(), (HtmlEnc $ch.Text))
+        if ($driftExact) {
+            C ("<div class='sub'>Review window: <b>at least {0} days</b>. Compared against the recorded state of <b>{1}</b>, {2} day(s) ago &ndash; the most recent baseline that is at least {0} days old. Every item below either changed inside that window, or is confirmed unchanged.</div>" -f `
+                $DriftDays, $prevWhen.ToString('MMMM d, yyyy'), $driftAgeDays)
         }
-        C '</ul>'
-    }
+        else {
+            C ("<div class='note'>No snapshot {0} days old exists yet. This comparison uses the <b>earliest available</b> baseline, {1} &ndash; a window of <b>{2} day(s)</b>, not {0}. The window reaches the full {0} days once the report has been run on this schedule that long.</div>" -f `
+                $DriftDays, $prevWhen.ToString('MMMM d, yyyy'), $driftAgeDays)
+        }
 
+        C '<div class="tiles">'
+        C ("<div class='tile'><b>{0}</b><span>Total changes</span></div>" -f $totalDrift)
+        C ("<div class='tile'><b>{0}</b><span>Control areas changed</span></div>" -f $areaChanged)
+        C ("<div class='tile'><b>{0}</b><span>Setting changes</span></div>" -f $setRows.Count)
+        C ("<div class='tile'><b style='color:{1}'>{0}</b><span>Privileged changes</span></div>" -f `
+            $privRows.Count, $(if ($privRows.Count -gt 0) { 'var(--hi)' } else { 'var(--ink)' }))
+        C ("<div class='tile'><b>{0}</b><span>User changes</span></div>" -f $userRows.Count)
+        C ("<div class='tile'><b>{0}</b><span>Computer changes</span></div>" -f $compRows.Count)
+        C '</div>'
+
+        if ($changes.Count -gt 0) {
+            C '<h3>Headlines</h3>'
+            C '<ul class="chg">'
+            foreach ($ch in @($changes | Sort-Object @{ e = { @{ 'Worse' = 0; 'Better' = 1; 'Neutral' = 2 }[$_.Dir] } })) {
+                C ("<li class='{0}'><span class='tag {0}'>{1}</span> &nbsp;{2}</li>" -f $ch.Dir, $ch.Dir.ToUpper(), (HtmlEnc $ch.Text))
+            }
+            C '</ul>'
+        }
+
+        # -------------------------------------------- 1. control area status --
+        C '<h3>1. Control areas &mdash; changed or unchanged</h3>'
+        C ("<table><tr><th style='width:27%'>Control area</th><th style='width:24%'>As of {0}</th><th style='width:24%'>Today</th><th style='width:25%'>Result</th></tr>" -f `
+            (HtmlEnc $prevWhen.ToString('MMM d, yyyy')))
+        foreach ($r in $areaRows) {
+            $cls = $(if ($r.Change -eq 'No change') { 'same' } else { 'diff' })
+            C ("<tr><td><b>{0}.</b> {1}</td><td>{2}</td><td>{3}</td><td class='{4}'>{5}</td></tr>" -f `
+                $r.Letter, (HtmlEnc $r.Title), (HtmlEnc $r.Was), (HtmlEnc $r.Now), $cls, (HtmlEnc $r.Change))
+        }
+        C '</table>'
+        C ("<div class='sub'>{0} of {1} control areas changed in this window; <b>{2} are unchanged</b>.</div>" -f `
+            $areaChanged, $areaRows.Count, ($areaRows.Count - $areaChanged))
+
+        # ------------------------------------------------ 2. setting changes --
+        C '<h3>2. Group Policy setting changes</h3>'
+        if (-not $setComparable) {
+            C '<div class="note">The baseline snapshot predates setting-level tracking, so individual settings cannot be compared against it. Setting-level drift will be reported from the next review onward.</div>'
+        }
+        elseif ($setRows.Count -eq 0) {
+            C '<div class="same-note"><b>No change.</b> No Group Policy setting in any reviewed control area was added, removed or modified in this window.</div>'
+        }
+        else {
+            C '<table><tr><th style="width:13%">Area</th><th style="width:22%">Setting</th><th style="width:10%">Change</th><th style="width:20%">Was</th><th style="width:20%">Now</th><th style="width:15%">GPO</th></tr>'
+            $setSorted = @($setRows |
+                Sort-Object @{ e = { $(if ($script:AreaTitle.ContainsKey($_.Scope)) { $script:AreaTitle[$_.Scope] } else { $_.Scope }) } }, Item, Detail |
+                Select-Object -First $script:DriftRowCap)
+            foreach ($r in $setSorted) {
+                $at = $script:AreaTitle[$r.Scope]
+                if (-not $at) { $at = $r.Scope }
+                C ("<tr><td>{0}</td><td>{1}</td><td class='set-{2}'>{2}</td><td class='was'>{3}</td><td class='now'>{4}</td><td class='sub'>{5}</td></tr>" -f `
+                    (HtmlEnc $at), (HtmlEnc $r.Item), (HtmlEnc $r.Change), `
+                    (HtmlEnc $r.Was), (HtmlEnc $r.Now), (HtmlEnc $r.Detail))
+            }
+            C '</table>'
+            if ($setRows.Count -gt $script:DriftRowCap) {
+                C ("<div class='sub'>Showing the first {0} of {1}. The complete list is in Drift-Changes.csv.</div>" -f $script:DriftRowCap, $setRows.Count)
+            }
+        }
+
+        # ------------------------------------------ 3. privileged membership --
+        C '<h3>3. Privileged group membership changes</h3>'
+        if ($privRows.Count -eq 0) {
+            C '<div class="same-note"><b>No change.</b> No account was added to or removed from Administrators, Domain Admins, Enterprise Admins or Schema Admins in this window.</div>'
+        }
+        else {
+            C '<table><tr><th style="width:28%">Group</th><th style="width:24%">Account</th><th style="width:20%">Change</th><th style="width:14%">Was</th><th style="width:14%">Now</th></tr>'
+            foreach ($r in $privRows) {
+                C ("<tr><td>{0}</td><td class='mono'>{1}</td><td class='chg-{2}'>{3}</td><td class='was'>{4}</td><td class='now'>{5}</td></tr>" -f `
+                    (HtmlEnc $r.Scope), (HtmlEnc $r.Item), `
+                    $(if ($r.Change -like 'Added*') { 'Added' } else { 'Removed' }), (HtmlEnc $r.Change), `
+                    (HtmlEnc $r.Was), (HtmlEnc $r.Now))
+            }
+            C '</table>'
+            C '<div class="sub">Every addition to a privileged group should have an approved change record behind it.</div>'
+        }
+
+        # -------------------------------------------------- 4. user accounts --
+        C '<h3>4. User account changes</h3>'
+        if (-not $userDriftOn) {
+            C ("<div class='note'>Not measured. {0}</div>" -f `
+                $(if ($SkipUserDrift) { 'This report was run with -SkipUserDrift.' }
+                  elseif (-not $cleanup.Checked) { 'Active Directory account data was not collected on this run, so accounts could not be compared.' }
+                  else { 'The baseline snapshot does not contain per-account detail. Account-level drift will be reported from the next review onward.' }))
+        }
+        elseif ($userRows.Count -eq 0) {
+            C '<div class="same-note"><b>No change.</b> No user account was created or deleted, enabled or disabled, moved between organizational units, or had its password-expiry or account-expiry setting changed in this window.</div>'
+        }
+        else {
+            C '<table><tr><th style="width:17%">Account</th><th style="width:19%">Name</th><th style="width:22%">Change</th><th style="width:21%">Was</th><th style="width:21%">Now</th></tr>'
+            foreach ($r in @($userRows | Select-Object -First $script:DriftRowCap)) {
+                C ("<tr><td class='mono'>{0}</td><td>{1}</td><td class='chg-{2}'>{3}</td><td class='was'>{4}</td><td class='now'>{5}</td></tr>" -f `
+                    (HtmlEnc $r.Item), (HtmlEnc $r.Detail), (Get-DriftClass $r.Change), (HtmlEnc $r.Change), `
+                    (HtmlEnc $r.Was), (HtmlEnc $r.Now))
+            }
+            C '</table>'
+            if ($userRows.Count -gt $script:DriftRowCap) {
+                C ("<div class='sub'>Showing the first {0} of {1}. The complete list is in Drift-Changes.csv.</div>" -f $script:DriftRowCap, $userRows.Count)
+            }
+        }
+
+        # ---------------------------------------------- 5. computer accounts --
+        C '<h3>5. Computer account changes</h3>'
+        if (-not $userDriftOn) {
+            C '<div class="note">Not measured &ndash; see the note above.</div>'
+        }
+        elseif ($compRows.Count -eq 0) {
+            C '<div class="same-note"><b>No change.</b> No computer account was joined, removed, enabled, disabled or moved in this window.</div>'
+        }
+        else {
+            C '<table><tr><th style="width:22%">Computer</th><th style="width:22%">Change</th><th style="width:19%">Was</th><th style="width:19%">Now</th><th style="width:18%">Organizational unit</th></tr>'
+            foreach ($r in @($compRows | Select-Object -First $script:DriftRowCap)) {
+                C ("<tr><td class='mono'>{0}</td><td class='chg-{1}'>{2}</td><td class='was'>{3}</td><td class='now'>{4}</td><td class='sub'>{5}</td></tr>" -f `
+                    (HtmlEnc $r.Item), (Get-DriftClass $r.Change), (HtmlEnc $r.Change), `
+                    (HtmlEnc $r.Was), (HtmlEnc $r.Now), (HtmlEnc $r.Detail))
+            }
+            C '</table>'
+            if ($compRows.Count -gt $script:DriftRowCap) {
+                C ("<div class='sub'>Showing the first {0} of {1}. The complete list is in Drift-Changes.csv.</div>" -f $script:DriftRowCap, $compRows.Count)
+            }
+        }
+
+        if ($totalDrift -eq 0 -and $areaChanged -eq 0) {
+            C ("<div class='same-note' style='margin-top:14px'><b>No configuration drift detected.</b> Every item reviewed above is unchanged from {0}.</div>" -f `
+                $prevWhen.ToString('MMMM d, yyyy'))
+        }
+    }
     # ---- control mapping
     C '<h2>Control review and mapping</h2>'
-    C '<table><tr><th style="width:24%">Control area</th><th style="width:9%">Status</th><th style="width:31%">Configured by</th><th style="width:36%">Reference</th></tr>'
+    C '<table><tr><th style="width:22%">Control area</th><th style="width:9%">Status</th><th style="width:27%">Configured by</th><th style="width:42%">Reference</th></tr>'
     foreach ($fa in $script:FocusAreas) {
         $sf = $snapFocus[$fa.Key]
         $st = if ($sf.Configured) { '<span class="st ok">Configured</span>' } else { '<span class="st no">Not configured</span>' }
         $by = if ($sf.Gpos.Count -gt 0) { (HtmlEnc (($sf.Gpos) -join '; ')) } else { '<span class="sub">No applying GPO</span>' }
         C ("<tr><td><b>{0}.</b> {1}</td><td>{2}</td><td>{3}</td><td>{4}</td></tr>" -f `
-            $fa.Letter, (HtmlEnc $fa.Title), $st, $by, (HtmlEnc $script:ControlMap[$fa.Key]))
+            $fa.Letter, (HtmlEnc $fa.Title), $st, $by, (Format-Ref $script:ControlMap[$fa.Key]))
     }
     C ("<tr><td><b>G.</b> Privileged group membership</td><td>{0}</td><td>{1}</td><td>{2}</td></tr>" -f `
         $(if ($privGroups.Count -gt 0) { '<span class="st ok">Reviewed</span>' } else { '<span class="st no">Not checked</span>' }),
         $(if ($privGroups.Count -gt 0) { 'Administrators, Domain Admins, Enterprise Admins, Schema Admins' } else { '<span class="sub">Not collected</span>' }),
-        (HtmlEnc $script:ControlMap['privileged']))
+        (Format-Ref $script:ControlMap['privileged']))
     C ("<tr><td><b>H.</b> Account provisioning and dormancy</td><td>{0}</td><td>{1}</td><td>{2}</td></tr>" -f `
         $(if ($cleanup.Checked) { '<span class="st ok">Reviewed</span>' } else { '<span class="st no">Not checked</span>' }),
         $(if ($cleanup.Checked) { ("Thresholds: users {0} days, computers {1} days" -f $StaleUserDays, $StaleComputerDays) } else { '<span class="sub">Not collected</span>' }),
-        (HtmlEnc $script:ControlMap['stale']))
+        (Format-Ref $script:ControlMap['stale']))
     C ("<tr><td><b>I.</b> User logon restrictions</td><td>{0}</td><td>{1}</td><td>{2}</td></tr>" -f `
         $(if ($null -ne $logonScan) { '<span class="st ok">Reviewed</span>' } else { '<span class="st no">Not checked</span>' }),
         $(if ($null -ne $logonScan) { 'logonHours, logonWorkstations, account expiry' } else { '<span class="sub">Not collected</span>' }),
-        (HtmlEnc $script:ControlMap['logon']))
+        (Format-Ref $script:ControlMap['logon']))
+
+    $prProds  = @($pwdRestrict.Products)
+    $prUnk    = @($pwdRestrict.Filters | Where-Object { -not $_.Known })
+    $prStatus = '<span class="st no">Not checked</span>'
+    $prBy     = '<span class="sub">Registry not readable</span>'
+    if ($pwdRestrict.Checked) {
+        if ($prProds.Count -gt 0 -or $prUnk.Count -gt 0) {
+            $prStatus = '<span class="st ok">Customized</span>'
+            $names = @()
+            foreach ($pd in $prProds) {
+                $names += $(if ($pd.Mode) { ('{0} ({1})' -f $pd.Product, $pd.Mode) } else { $pd.Product })
+            }
+            foreach ($u in $prUnk) { $names += ('Unrecognised filter: ' + $u.Dll) }
+            $prBy = HtmlEnc (($names | Select-Object -Unique) -join '; ')
+            if ($null -ne $pwdRestrict.EntraMode -and $pwdRestrict.EntraMode.AuditOnly -eq $true) {
+                $prStatus = '<span class="st no">Audit only</span>'
+            }
+        }
+        else {
+            $prStatus = '<span class="st no">Default only</span>'
+            $prBy     = 'Windows built-in complexity only &ndash; no banned word list, dictionary or breached-password check'
+        }
+    }
+    C ("<tr><td><b>J.</b> Password content restrictions<br><span class='sub'>banned words, dictionary, breached passwords</span></td><td>{0}</td><td>{1}</td><td>{2}</td></tr>" -f `
+        $prStatus, $prBy, (Format-Ref $script:ControlMap['pwdcontent']))
     C '</table>'
-    C '<div class="note"><b>On the references:</b> FFIEC citations are to the current IT Examination Handbook booklets. NIST CSF 2.0 categories are given as a cross-reference for institutions aligned to the CRI Profile or to CSF directly. These are the default mappings shipped with the script and are a starting point &ndash; confirm them against your institution&rsquo;s own control set and your examiner&rsquo;s expectations. They are defined in one place at the top of the script ($script:ControlMap) and can be edited to match your house citations.</div>'
+    C '<div class="note"><b>On the references:</b> FFIEC citations are to the current IT Examination Handbook booklets. NIST CSF 2.0 gives the Function and Category. CRI Profile references are to the Cyber Risk Institute Profile v2.x at the <i>Category</i> level; the Profile identifies individual requirements as diagnostic statements in the form <span class="mono">FUNCTION.CATEGORY-##.##</span>, so if your institution reports against specific diagnostic statements, add those numbers from your licensed Profile workbook. CIS Controls v8 safeguards are included for institutions whose hardening standard is the Center for Internet Security Benchmarks. These are the default mappings shipped with the script and are a starting point &ndash; confirm them against your institution&rsquo;s own control set and your examiner&rsquo;s expectations. They are defined in one place at the top of the script ($script:ControlMap) and can be edited to match your house citations. Framework names are used for mapping and identification only; no endorsement, certification or affiliation is implied.</div>'
 
     # ---- open items
     C '<h2>Open items</h2>'
@@ -3128,7 +4309,7 @@ a{color:var(--accent)}
         C '<table><tr><th style="width:8%">Severity</th><th style="width:30%">Finding</th><th style="width:38%">Detail</th><th style="width:24%">Reference</th></tr>'
         foreach ($f in $findings) {
             C ("<tr><td><span class='sev {0}'>{0}</span></td><td>{1}</td><td>{2}</td><td class='sub'>{3}</td></tr>" -f `
-                $f.Sev, (HtmlEnc $f.Title), (HtmlEnc $f.Detail), (HtmlEnc $f.Ref))
+                $f.Sev, (HtmlEnc $f.Title), (HtmlEnc $f.Detail), (Format-Ref $f.Ref))
         }
         C '</table>'
     }
@@ -3154,6 +4335,25 @@ a{color:var(--accent)}
 
     $committeePath = Join-Path $reportDir ('AD-Committee-Review-{0}-{1}.html' -f ($Domain -replace '[^\w\.\-]', '_'), (Get-Date -Format 'yyyyMMdd'))
     [System.IO.File]::WriteAllText($committeePath, $cb.ToString(), (New-Object System.Text.UTF8Encoding($true)))
+
+    # the complete, uncapped change list - the HTML tables are capped for print
+    if (-not $NoCsv -and $totalDrift -gt 0) {
+        try {
+            $allDiffs |
+                Select-Object @{ n = 'Category'; e = {
+                        if ($_.Scope -eq 'User') { 'User account' }
+                        elseif ($_.Scope -eq 'Computer') { 'Computer account' }
+                        elseif ($script:AreaTitle.ContainsKey($_.Scope)) { ('GPO setting - ' + $script:AreaTitle[$_.Scope]) }
+                        else { 'Privileged group' } } },
+                    @{ n = 'Scope'; e = { $_.Scope } }, Item, Change, Was, Now,
+                    @{ n = 'Detail'; e = { $_.Detail } },
+                    @{ n = 'BaselineDate'; e = { $(if ($prevWhen) { $prevWhen.ToString('yyyy-MM-dd') } else { '' }) } },
+                    @{ n = 'ComparedOn'; e = { (Get-Date -Format 'yyyy-MM-dd') } },
+                    @{ n = 'WindowDays'; e = { $driftAgeDays } } |
+                Export-Csv -Path (Join-Path $reportDir 'Drift-Changes.csv') -NoTypeInformation -Encoding UTF8
+        }
+        catch { Write-Warn ("Could not write Drift-Changes.csv: {0}" -f $_.Exception.Message) }
+    }
 
     # snapshot for the next run to compare against
     try { $snapshot | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $reportDir 'ad-snapshot.json') -Encoding UTF8 }
