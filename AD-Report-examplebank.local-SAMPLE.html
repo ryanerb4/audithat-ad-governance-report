@@ -1,0 +1,2011 @@
+﻿<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GPO Inventory - examplebank.local</title>
+<style>:root{--bg:#f6f7f9;--card:#fff;--ink:#1b1f24;--mut:#5c6673;--line:#dfe3e8;--accent:#0b5fff;--onacc:#fff;--warn:#b45309;--bad:#b91c1c;--ok:#15803d;--chip:#eef1f5}
+@media (prefers-color-scheme:dark){:root{--bg:#111418;--card:#181c21;--ink:#e6e9ee;--mut:#98a2b0;--line:#2a3038;--accent:#6ea8fe;--onacc:#0d1117;--warn:#f0b429;--bad:#f87171;--ok:#4ade80;--chip:#232931}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 "Segoe UI",system-ui,-apple-system,sans-serif}
+a{color:var(--accent)}
+.shell{display:flex;align-items:flex-start;min-height:100vh}
+nav.side{width:242px;flex:0 0 242px;background:var(--card);border-right:1px solid var(--line);padding:16px 12px;position:sticky;top:0;height:100vh;overflow:auto}
+nav.side .brand{font-weight:700;font-size:15px;padding:0 8px 12px;line-height:1.3}
+nav.side .brand small{display:block;font-weight:400;color:var(--mut);font-size:11.5px;margin-top:3px}
+nav.side a.brandmark{display:inline-block;margin:0 0 10px 8px;padding:3px 9px;border-radius:4px;background:var(--accent);color:var(--onacc);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;text-decoration:none}
+nav.side a.brandmark:hover{opacity:.85}
+nav.side a.nav{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:8px 10px;margin:1px 0;border-radius:6px;color:var(--ink);text-decoration:none;font-size:13.5px;cursor:pointer}
+nav.side a.nav:hover{background:var(--chip)}
+nav.side a.nav.on{background:var(--accent);color:var(--onacc)}
+nav.side a.nav.on .n{color:var(--onacc);opacity:.85}
+nav.side .n{color:var(--mut);font-size:11.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
+nav.side .grouplbl{color:var(--mut);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;padding:14px 10px 4px;font-weight:700}
+nav.side hr{border:none;border-top:1px solid var(--line);margin:12px 4px}
+nav.side .navnote{color:var(--mut);font-size:11.5px;padding:4px 10px;line-height:1.45}
+main{flex:1 1 auto;min-width:0;padding:20px 26px 60px;max-width:1400px}
+section.view{display:none}
+section.view.on{display:block}
+h1{margin:0 0 4px;font-size:20px}
+h2{margin:26px 0 10px;font-size:16px}
+.sub{color:var(--mut);font-size:13px}
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;position:sticky;top:0;background:var(--bg);padding:12px 0;margin-bottom:6px;z-index:5;border-bottom:1px solid var(--line)}
+.toolbar input[type=search]{flex:1 1 300px;min-width:200px;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink)}
+.toolbar select,.toolbar button{padding:7px 10px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);cursor:pointer}
+.toolbar label{color:var(--mut);display:flex;gap:5px;align-items:center;cursor:pointer}
+.stats{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0 18px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 14px;min-width:120px}
+.stat b{display:block;font-size:20px}
+.stat span{color:var(--mut);font-size:12px}
+.badge{font:600 11px/1 "Segoe UI",sans-serif;padding:4px 7px;border-radius:999px;background:var(--chip);color:var(--mut);white-space:nowrap}
+.badge.warn{color:var(--warn)} .badge.bad{color:var(--bad)} .badge.ok{color:var(--ok)}
+
+/* ---- focus areas: links to GPOs only ---- */
+.area{background:var(--card);border:1px solid var(--line);border-radius:8px;margin-bottom:12px;padding:14px 16px}
+.area>h3{margin:0;font-size:15px;display:flex;flex-wrap:wrap;gap:9px;align-items:center}
+.area .letter{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;background:var(--accent);color:var(--onacc);font-size:12.5px;font-weight:700;flex:0 0 auto}
+.area .hint{color:var(--mut);font-size:12.5px;margin:7px 0 10px 33px}
+.gpolist{margin:0 0 0 33px;display:flex;flex-direction:column;gap:6px}
+details.grow{border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--bg)}
+details.grow>summary{display:flex;flex-wrap:wrap;gap:9px;align-items:center;padding:7px 10px;cursor:pointer;list-style:none}
+details.grow>summary::-webkit-details-marker{display:none}
+details.grow>summary::before{content:"\25B8";color:var(--mut);transition:transform .12s;flex:0 0 auto}
+details.grow[open]>summary::before{transform:rotate(90deg)}
+details.grow[open]>summary{background:var(--chip)}
+details.grow .gname{font-weight:600;color:var(--accent)}
+details.grow .jump{margin-left:auto;font-size:11.5px;white-space:nowrap;text-decoration:none}
+details.grow .jump:hover{text-decoration:underline}
+.where{color:var(--mut);font-size:12px;font-family:Consolas,"Cascadia Mono",monospace}
+.fbody{border-top:1px solid var(--line);background:var(--card);padding:10px 12px 4px}
+.fsechead{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);font-weight:700;margin:4px 0 6px}
+.fbody .scope{margin:0 0 12px}
+.fbody .scope th{width:190px;padding:6px 9px}
+table.focustbl{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--card);margin-bottom:8px;border-top:1px solid var(--line)}
+table.focustbl td{padding:6px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+table.focustbl tr:last-child td{border-bottom:none}
+table.focustbl td.k{width:46%}
+table.focustbl td.v{font-family:Consolas,"Cascadia Mono",monospace;color:var(--mut);word-break:break-word}
+.missing{margin-left:33px;padding:9px 11px;border-radius:6px;background:var(--chip);color:var(--bad);font-weight:600;font-size:12.5px}
+.note{margin:9px 0 0 33px;padding:9px 11px;border-radius:6px;background:var(--chip);color:var(--warn);font-weight:600;font-size:12.5px}
+.psotbl{width:100%;border-collapse:collapse;font-size:12.5px;margin:10px 0 0 33px;max-width:calc(100% - 33px)}
+.psotbl th{text-align:left;padding:5px 8px;color:var(--mut);border-bottom:1px solid var(--line);font-size:11px;text-transform:uppercase;letter-spacing:.03em}
+.psotbl td{padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+
+/* ---- gpo cards ---- */
+details.gpo{background:var(--card);border:1px solid var(--line);border-radius:8px;margin-bottom:10px;overflow:hidden}
+details.gpo>summary{padding:11px 14px;cursor:pointer;font-weight:600;font-size:15px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;list-style:none}
+details.gpo>summary::-webkit-details-marker{display:none}
+details.gpo>summary::before{content:"\25B8";color:var(--mut);font-weight:400;display:inline-block;transition:transform .12s}
+details.gpo[open]>summary::before{transform:rotate(90deg)}
+.gpmc{margin-left:auto;font-weight:400;font-size:12px;white-space:nowrap}
+.body{padding:0 14px 14px}
+.scope{border:1px solid var(--line);border-radius:6px;margin:4px 0 12px;overflow:hidden}
+.scope table{width:100%;border-collapse:collapse;font-size:13px}
+.scope th{text-align:left;width:210px;padding:8px 10px;color:var(--ink);font-weight:600;vertical-align:top;background:var(--chip)}
+.scope th .hint{font-weight:400;font-size:11px;color:var(--mut);line-height:1.3;margin:0}
+.scope td{padding:6px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+.links{margin:0;padding-left:18px}
+.links li{margin:2px 0}
+details.side{margin:0 0 8px;border-left:3px solid var(--accent);padding-left:10px}
+details.side>summary{cursor:pointer;font-weight:600;padding:5px 0;color:var(--accent)}
+details.cont{margin:2px 0 2px 12px}
+details.cont>summary{cursor:pointer;padding:4px 0;color:var(--ink);font-size:13px}
+details.cont>summary .path{font-family:Consolas,"Cascadia Mono",monospace;font-size:12.5px}
+details.cont>summary .cnt{color:var(--mut);font-size:11.5px;margin-left:6px}
+table.settings{width:100%;border-collapse:collapse;margin:4px 0 8px 14px;font-size:13px}
+table.settings td{padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+table.settings td.k{width:42%;font-weight:500}
+table.settings td.v{color:var(--mut);font-family:Consolas,"Cascadia Mono",monospace;font-size:12.5px;word-break:break-word}
+.empty{color:var(--mut);font-style:italic;padding:6px 0}
+
+/* ---- privileged groups ---- */
+.grp{border:1px solid var(--line);border-radius:8px;margin-bottom:12px;overflow:hidden;background:var(--card)}
+.grp>h3{margin:0;padding:10px 14px;font-size:14px;background:var(--chip);display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.grp table{width:100%;border-collapse:collapse;font-size:12.5px}
+.grp th{text-align:left;padding:6px 10px;color:var(--mut);border-bottom:1px solid var(--line);font-size:11px;text-transform:uppercase;letter-spacing:.03em}
+.grp td{padding:6px 10px;border-bottom:1px solid var(--line)}
+.grp .nested{padding:8px 14px;color:var(--mut);font-size:12.5px}
+.mono{font-family:Consolas,"Cascadia Mono",monospace}
+.mut{color:var(--mut)}
+.verified{margin:12px 0 0;padding:9px 11px;border-radius:6px;background:var(--chip);color:var(--ok);font-weight:600;font-size:12.5px}
+th.sortable{cursor:pointer;user-select:none;white-space:nowrap}
+th.sortable:hover{color:var(--ink)}
+th.sortable::after{content:"\2195";margin-left:5px;opacity:.3;font-weight:400}
+th.sortable[data-dir="asc"]::after{content:"\25B2";opacity:.85}
+th.sortable[data-dir="desc"]::after{content:"\25BC";opacity:.85}
+th.sortable[data-dir]{color:var(--accent)}
+details.sugg{margin:10px 0 0 33px;border:1px solid var(--accent);border-radius:7px;overflow:hidden}
+details.sugg>summary{cursor:pointer;list-style:none;padding:9px 13px;font-weight:600;font-size:13px;color:var(--onacc);background:var(--accent);display:flex;gap:8px;align-items:center}
+details.sugg>summary::-webkit-details-marker{display:none}
+details.sugg>summary::before{content:"\25B8";transition:transform .12s}
+details.sugg[open]>summary::before{transform:rotate(90deg)}
+.suggbody{padding:13px 15px;background:var(--card)}
+.suggbody p{margin:0 0 10px;font-size:13px;line-height:1.5}
+.suggbody h5{margin:16px 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut)}
+.suggbody ol{margin:0 0 10px;padding-left:20px;font-size:13px;line-height:1.6}
+.suggbody code{font-family:Consolas,"Cascadia Mono",monospace;font-size:12px;background:var(--chip);padding:1px 4px;border-radius:3px}
+pre.snippet{background:var(--chip);border:1px solid var(--line);border-radius:6px;padding:11px 13px;margin:0;font:12px/1.5 Consolas,"Cascadia Mono",monospace;white-space:pre-wrap;word-break:break-word;color:var(--ink);max-height:340px;overflow:auto}
+.copyrow{display:flex;gap:8px;align-items:center;margin:6px 0 0}
+button.btn{padding:5px 11px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);cursor:pointer;font-size:12px}
+button.btn:hover{border-color:var(--accent);color:var(--accent)}
+.cite{font-size:12px;color:var(--mut);border-left:3px solid var(--line);padding-left:10px;margin:10px 0}
+.tbl{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:8px;font-size:12.5px}
+.tbl th{text-align:left;padding:8px 10px;background:var(--chip);color:var(--mut);border-bottom:1px solid var(--line);font-size:11px;text-transform:uppercase;letter-spacing:.03em;position:sticky;top:0}
+.tbl td{padding:6px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+.tblbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:14px 0 12px}
+
+/* ---- password restrictions ---- */
+table.grid{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:8px;font-size:12.5px;margin:10px 0 6px}
+table.grid th{text-align:left;padding:8px 10px;background:var(--chip);color:var(--mut);border-bottom:1px solid var(--line);font-size:11px;text-transform:uppercase;letter-spacing:.03em}
+table.grid td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top;line-height:1.5}
+table.grid tr:last-child td{border-bottom:none}
+.ok-note{margin:12px 0;padding:10px 12px;border-radius:6px;background:var(--chip);border-left:3px solid var(--ok);color:var(--ink);font-size:13px;line-height:1.5}
+#view-pwdrestrict .missing{margin-left:0;font-weight:400;line-height:1.55;padding:11px 13px}
+#view-pwdrestrict .missing b{font-weight:700}
+#view-pwdrestrict .area{padding:12px 14px}
+.wordlist{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 4px;max-height:320px;overflow:auto}
+.wordlist .word{font-family:Consolas,"Cascadia Mono",monospace;font-size:12px;padding:2px 7px;border-radius:4px;background:var(--chip);border:1px solid var(--line);white-space:nowrap}
+.tblbar input[type=search]{flex:1 1 280px;min-width:200px;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink)}
+.days{font-variant-numeric:tabular-nums;white-space:nowrap}
+.lhuser{background:var(--card);border:1px solid var(--line);border-radius:8px;margin-bottom:10px;padding:12px 14px;display:flex;flex-wrap:wrap;gap:18px}
+.lhwho{flex:1 1 300px;min-width:260px}
+.lhwho h4{margin:0 0 2px;font-size:14.5px;display:flex;flex-wrap:wrap;gap:7px;align-items:center}
+.lhwho .sam{color:var(--mut);font-size:12.5px;font-family:Consolas,"Cascadia Mono",monospace}
+.lhmeta{margin-top:8px;font-size:12.5px}
+.lhmeta div{margin:3px 0}
+.lhmeta b{color:var(--mut);font-weight:600;display:inline-block;min-width:110px;padding-right:8px}
+.lhgrid{display:grid;grid-template-columns:34px repeat(24,14px);gap:2px;align-items:center;flex:0 0 auto}
+.lhgrid .hr{font-size:10px;color:var(--mut);text-align:center;font-family:Consolas,monospace}
+.lhgrid .day{font-size:11px;color:var(--mut);text-align:right;padding-right:4px}
+.lhgrid i{display:block;width:14px;height:14px;border-radius:2px;background:var(--chip)}
+.lhgrid i.on{background:var(--accent)}
+.lhlegend{display:flex;gap:16px;align-items:center;color:var(--mut);font-size:12px;margin:0 0 14px}
+.lhlegend i{display:inline-block;width:12px;height:12px;border-radius:2px;vertical-align:-2px;margin-right:5px}
+.lhnohours{flex:0 0 auto;align-self:center;color:var(--mut);font-size:12.5px;font-style:italic;padding-right:8px}
+
+/* ---- appendix tables ---- */
+.appendix table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:8px;font-size:13px}
+.appendix th{text-align:left;padding:8px 10px;background:var(--chip);color:var(--mut);border-bottom:1px solid var(--line)}
+.appendix td{padding:6px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+footer{color:var(--mut);font-size:12px;padding:24px 0 0;text-align:center}</style></head><body>
+<div style="position:relative;z-index:9999;background:#7c2d12;color:#fff;font:600 13px/1.4 'Segoe UI',system-ui,sans-serif;padding:10px 16px;text-align:center;border-bottom:2px solid #431407">
+SAMPLE REPORT &mdash; every domain, account, computer and finding below is FICTIONAL.
+Generated against an invented &ldquo;Example Bank&rdquo; lab domain to show the report format.
+No real directory data appears here. &nbsp;<a href="https://audithat.com" style="color:#fed7aa">audithat.com</a>
+</div>
+
+<div class="shell"><nav class="side">
+<a class='brandmark' href='https://audithat.com' target='_blank' rel='noopener'>AuditHat</a>
+<div class='brand'>examplebank.local<small>Active Directory review<br>2026-09-20 20:22<br>AD via ActiveDirectory module</small></div>
+<div class="grouplbl">Audit</div>
+<a class='nav on' data-view='focus' href='#'>Focus areas (A&ndash;F)<span class='n'>6</span></a>
+<a class='nav' data-view='priv' href='#'>Privileged groups<span class='n'>10</span></a>
+<a class='nav' data-view='logon' href='#'>Logon restrictions<span class='n'>7</span></a>
+<a class='nav' data-view='pwdrestrict' href='#'>Password restrictions<span class='n'>2</span></a>
+<div class="grouplbl">Inventory</div>
+<a class='nav' data-view='gpos' href='#'>All GPOs<span class='n'>5</span></a>
+<a class='nav' data-view='scope' href='#'>Scope index<span class='n'>6</span></a>
+<a class='nav' data-view='unlinked' href='#'>Unlinked GPOs<span class='n'>1</span></a>
+<div class="grouplbl">Cleanup</div>
+<a class='nav' data-view='cl-disabled' href='#'>Disabled users<span class='n'>5</span></a>
+<a class='nav' data-view='cl-users' href='#'>Stale users &gt; 30d<span class='n'>1</span></a>
+<a class='nav' data-view='cl-computers' href='#'>Stale computers &gt; 60d<span class='n'>2</span></a>
+<hr>
+<div class='navnote'>33 configured settings across 5 GPOs.<br>CSV exports are in this folder.</div>
+</nav><main>
+<section class="view on" id="view-focus">
+<h1>Auditor focus areas</h1>
+<div class="sub">Which GPOs configure each area auditors ask about. Expand a GPO to see the settings it contributes to that area, or open it in the full inventory. GPOs that are not applying &ndash; unlinked, every link disabled, or settings disabled &ndash; are hidden by default.</div>
+<div class="tblbar"><label style="color:var(--mut);display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="fApply"> Include GPOs that are not applying</label></div>
+<div class="area">
+<h3><span class='letter'>A</span> Password policy - users and administrators <span class='badge cnt'></span></h3>
+<div class='hint'>Domain password policy comes from a GPO linked at the DOMAIN root. Separate rules for admins are normally fine-grained password policies (PSOs), listed underneath.</div>
+<div class="missing noneMsg" style="display:none"></div>
+<div class="gpolist">
+<details class='grow' data-applying='1'>
+<summary><span class='gname'>Default Domain Policy</span><span class='badge'>6 setting(s)</span><span class='where'>examplebank.local</span><a class='jump' href='#' onclick="event.stopPropagation();return gotoGpo('gpo-31b2f340-016d-11d2-945f-00c04fb984f9')">open full GPO &#8599;</a></summary>
+<div class="fbody">
+<div class="fsechead">Scope &ndash; who and what this GPO applies to</div>
+<div class="scope"><table>
+<tr><th>Enabled?</th><td><span class="badge ok">ENABLED</span> &nbsp;All settings enabled.</td></tr>
+<tr><th>Applies to<br><span class="hint">which computers / users<br>(linked containers)</span></th><td>
+<ul class="links">
+<li>examplebank.local</li>
+</ul>
+</td></tr>
+<tr><th>Filtered to<br><span class="hint">which users / groups /<br>computers get it applied</span></th><td>
+Authenticated Users
+</td></tr>
+</table></div>
+<div class='fsechead'>Settings this GPO contributes to Password policy - users and administrators</div>
+<table class="focustbl">
+<tr><td class='k'>ClearTextPassword<div class='where'>Computer Config &middot; Policies\Windows Settings\Security Settings\Account Policies\Password Policy</div></td><td class='v'>Disabled</td></tr>
+<tr><td class='k'>MaximumPasswordAge<div class='where'>Computer Config &middot; Policies\Windows Settings\Security Settings\Account Policies\Password Policy</div></td><td class='v'>90 days</td></tr>
+<tr><td class='k'>MinimumPasswordAge<div class='where'>Computer Config &middot; Policies\Windows Settings\Security Settings\Account Policies\Password Policy</div></td><td class='v'>1 day</td></tr>
+<tr><td class='k'>MinimumPasswordLength<div class='where'>Computer Config &middot; Policies\Windows Settings\Security Settings\Account Policies\Password Policy</div></td><td class='v'>12 characters</td></tr>
+<tr><td class='k'>PasswordComplexity<div class='where'>Computer Config &middot; Policies\Windows Settings\Security Settings\Account Policies\Password Policy</div></td><td class='v'>Enabled</td></tr>
+<tr><td class='k'>PasswordHistorySize<div class='where'>Computer Config &middot; Policies\Windows Settings\Security Settings\Account Policies\Password Policy</div></td><td class='v'>24 passwords remembered</td></tr>
+</table></div></details>
+</div>
+<div class="hint"><b>Fine-grained password policies (PSOs)</b> &ndash; these override the domain policy for the principals listed.</div>
+<table class="psotbl"><tr><th>PSO</th><th>Applies to</th><th>Min length</th><th>Complexity</th><th>History</th><th>Max password age</th><th>Lockout threshold</th><th>Lockout duration</th></tr>
+<tr><td>PSO-PrivilegedAccounts<div class='where'>precedence 10</div></td><td class='where'>Domain Admins, Tier0 Admins</td><td>18 characters</td><td>True</td><td>24</td><td>60 days</td><td>3 attempts</td><td>0.5 hours (00:30:00)</td></tr>
+<tr><td>PSO-ServiceAccounts<div class='where'>precedence 20</div></td><td class='where'>Service Accounts</td><td>25 characters</td><td>True</td><td>24</td><td>0 hours</td><td>disabled</td><td>0 hours (00:00:00)</td></tr>
+</table>
+</div>
+<div class="area">
+<h3><span class='letter'>B</span> Account lockout <span class='badge cnt'></span></h3>
+<div class='hint'>Threshold, duration and reset counter. Also applied at the domain root.</div>
+<div class="missing noneMsg" style="display:none"></div>
+<div class="gpolist">
+<details class='grow' data-applying='1'>
+<summary><span class='gname'>Default Domain Policy</span><span class='badge'>3 setting(s)</span><span class='where'>examplebank.local</span><a class='jump' href='#' onclick="event.stopPropagation();return gotoGpo('gpo-31b2f340-016d-11d2-945f-00c04fb984f9')">open full GPO &#8599;</a></summary>
+<div class="fbody">
+<div class="fsechead">Scope &ndash; who and what this GPO applies to</div>
+<div class="scope"><table>
+<tr><th>Enabled?</th><td><span class="badge ok">ENABLED</span> &nbsp;All settings enabled.</td></tr>
+<tr><th>Applies to<br><span class="hint">which computers / users<br>(linked containers)</span></th><td>
+<ul class="links">
+<li>examplebank.local</li>
+</ul>
+</td></tr>
+<tr><th>Filtered to<br><span class="hint">which users / groups /<br>computers get it applied</span></th><td>
+Authenticated Users
+</td></tr>
+</table></div>
+<div class='fsechead'>Settings this GPO contributes to Account lockout</div>
+<table class="focustbl">
+<tr><td class='k'>LockoutBadCount<div class='where'>Computer Config &middot; Policies\Windows Settings\Security Settings\Account Policies\Account Lockout Policy</div></td><td class='v'>5 failed attempts</td></tr>
+<tr><td class='k'>LockoutDuration<div class='where'>Computer Config &middot; Policies\Windows Settings\Security Settings\Account Policies\Account Lockout Policy</div></td><td class='v'>0.5 hours  (30 minutes)</td></tr>
+<tr><td class='k'>ResetLockoutCount<div class='where'>Computer Config &middot; Policies\Windows Settings\Security Settings\Account Policies\Account Lockout Policy</div></td><td class='v'>0.5 hours  (30 minutes)</td></tr>
+</table></div></details>
+</div>
+</div>
+<div class="area">
+<h3><span class='letter'>C</span> Audit policy and event logs <span class='badge cnt'></span></h3>
+<div class='hint'>Basic audit policy, advanced audit subcategories, and event log size / retention.</div>
+<div class="missing noneMsg" style="display:none"></div>
+<div class="gpolist">
+<details class='grow' data-applying='1'>
+<summary><span class='gname'>EXB - Server Hardening Baseline</span><span class='badge'>6 setting(s)</span><span class='where'>examplebank.local/Servers; examplebank.local/Domain Controllers</span><a class='jump' href='#' onclick="event.stopPropagation();return gotoGpo('gpo-a1111111-2222-3333-4444-555555555502')">open full GPO &#8599;</a></summary>
+<div class="fbody">
+<div class="fsechead">Scope &ndash; who and what this GPO applies to</div>
+<div class="scope"><table>
+<tr><th>Enabled?</th><td><span class="badge ok">ENABLED</span> &nbsp;User half of this GPO is disabled &ndash; only Computer settings apply.</td></tr>
+<tr><th>Applies to<br><span class="hint">which computers / users<br>(linked containers)</span></th><td>
+<ul class="links">
+<li>examplebank.local/Servers <span class="badge warn">ENFORCED</span></li>
+<li>examplebank.local/Domain Controllers</li>
+</ul>
+</td></tr>
+<tr><th>Filtered to<br><span class="hint">which users / groups /<br>computers get it applied</span></th><td>
+Authenticated Users
+</td></tr>
+<tr><th>WMI filter<br><span class="hint">further narrows targets</span></th><td>Windows Server 2022</td></tr>
+</table></div>
+<div class='fsechead'>Settings this GPO contributes to Audit policy and event logs</div>
+<table class="focustbl">
+<tr><td class='k'>Audit Credential Validation<div class='where'>Computer Config &middot; Advanced Audit Configuration</div></td><td class='v'>PolicyTarget: System  |  SubcategoryName: Audit Credential Validation  |  SubcategoryGuid: {0cce923f-69ae-11d9-bed3-505054503030}  |  SettingValue: 3</td></tr>
+<tr><td class='k'>Audit Logon<div class='where'>Computer Config &middot; Advanced Audit Configuration</div></td><td class='v'>PolicyTarget: System  |  SubcategoryName: Audit Logon  |  SubcategoryGuid: {0cce9215-69ae-11d9-bed3-505054503030}  |  SettingValue: 3</td></tr>
+<tr><td class='k'>AuditAccountManage<div class='where'>Computer Config &middot; Policies\Windows Settings\Security Settings\Local Policies\Audit Policy</div></td><td class='v'>Success, Failure</td></tr>
+<tr><td class='k'>AuditLogonEvents<div class='where'>Computer Config &middot; Policies\Windows Settings\Security Settings\Local Policies\Audit Policy</div></td><td class='v'>Success, Failure</td></tr>
+<tr><td class='k'>AuditPolicyChange<div class='where'>Computer Config &middot; Policies\Windows Settings\Security Settings\Local Policies\Audit Policy</div></td><td class='v'>Success, Failure</td></tr>
+<tr><td class='k'>Security event log: Maximum log size (KB)<div class='where'>Computer Config &middot; Policies\Windows Settings\Security Settings\Local Policies\Security Options</div></td><td class='v'>1048576</td></tr>
+</table></div></details>
+</div>
+</div>
+<div class="area">
+<h3><span class='letter'>D</span> Inactivity - screen lock and idle sessions <span class='badge cnt'></span></h3>
+<div class='hint'>Machine inactivity limit, screen saver lock, and RDP / SMB idle session timeouts.</div>
+<div class="missing noneMsg" style="display:none"></div>
+<div class="gpolist">
+<details class='grow' data-applying='1'>
+<summary><span class='gname'>EXB - Teller Workstation Lockdown</span><span class='badge'>1 setting(s)</span><span class='where'>examplebank.local/Branches/Tellers</span><a class='jump' href='#' onclick="event.stopPropagation();return gotoGpo('gpo-a1111111-2222-3333-4444-555555555503')">open full GPO &#8599;</a></summary>
+<div class="fbody">
+<div class="fsechead">Scope &ndash; who and what this GPO applies to</div>
+<div class="scope"><table>
+<tr><th>Enabled?</th><td><span class="badge ok">ENABLED</span> &nbsp;All settings enabled.</td></tr>
+<tr><th>Applies to<br><span class="hint">which computers / users<br>(linked containers)</span></th><td>
+<ul class="links">
+<li>examplebank.local/Branches/Tellers</li>
+</ul>
+</td></tr>
+<tr><th>Filtered to<br><span class="hint">which users / groups /<br>computers get it applied</span></th><td>
+Authenticated Users, EXAMPLEBANK\Teller Workstations
+</td></tr>
+<tr><th>Excluded<br><span class="hint">explicit Deny Apply</span></th><td>EXAMPLEBANK\Branch Managers</td></tr>
+</table></div>
+<div class='fsechead'>Settings this GPO contributes to Inactivity - screen lock and idle sessions</div>
+<table class="focustbl">
+<tr><td class='k'>Set time limit for active but idle Remote Desktop Services sessions<div class='where'>User Config &middot; Policies\Administrative Templates\Windows Components\Remote Desktop Services\Remote Desktop Session Host\Session Time Limits</div></td><td class='v'>Enabled  |  Idle session limit: 15 minutes</td></tr>
+</table></div></details>
+<details class='grow' data-applying='1'>
+<summary><span class='gname'>EXB - Workstation Security Baseline</span><span class='badge'>4 setting(s)</span><span class='where'>examplebank.local/Workstations; examplebank.local/Branches</span><a class='jump' href='#' onclick="event.stopPropagation();return gotoGpo('gpo-a1111111-2222-3333-4444-555555555501')">open full GPO &#8599;</a></summary>
+<div class="fbody">
+<div class="fsechead">Scope &ndash; who and what this GPO applies to</div>
+<div class="scope"><table>
+<tr><th>Enabled?</th><td><span class="badge ok">ENABLED</span> &nbsp;All settings enabled.</td></tr>
+<tr><th>Applies to<br><span class="hint">which computers / users<br>(linked containers)</span></th><td>
+<ul class="links">
+<li>examplebank.local/Workstations</li>
+<li>examplebank.local/Branches</li>
+</ul>
+</td></tr>
+<tr><th>Filtered to<br><span class="hint">which users / groups /<br>computers get it applied</span></th><td>
+Authenticated Users
+</td></tr>
+</table></div>
+<div class='fsechead'>Settings this GPO contributes to Inactivity - screen lock and idle sessions</div>
+<table class="focustbl">
+<tr><td class='k'>Do not display the lock screen<div class='where'>User Config &middot; Policies\Administrative Templates\Control Panel\Personalization</div></td><td class='v'>Enabled</td></tr>
+<tr><td class='k'>Password protect the screen saver<div class='where'>Computer Config &middot; Policies\Administrative Templates\Control Panel\Personalization</div></td><td class='v'>Enabled</td></tr>
+<tr><td class='k'>Screen saver timeout<div class='where'>Computer Config &middot; Policies\Administrative Templates\Control Panel\Personalization</div></td><td class='v'>Enabled  |  Seconds: 900</td></tr>
+<tr><td class='k'>Interactive logon: Machine inactivity limit<div class='where'>Computer Config &middot; Policies\Windows Settings\Security Settings\Local Policies\Security Options</div></td><td class='v'>1800</td></tr>
+</table></div></details>
+</div>
+</div>
+<div class="area">
+<h3><span class='letter'>E</span> USB and removable storage restrictions <span class='badge cnt'></span></h3>
+<div class='hint'>Removable Storage Access policies, device installation restrictions, and the USBSTOR service.</div>
+<div class="missing noneMsg" style="display:none"></div>
+<div class="gpolist">
+<details class='grow' data-applying='1'>
+<summary><span class='gname'>EXB - Teller Workstation Lockdown</span><span class='badge'>2 setting(s)</span><span class='where'>examplebank.local/Branches/Tellers</span><a class='jump' href='#' onclick="event.stopPropagation();return gotoGpo('gpo-a1111111-2222-3333-4444-555555555503')">open full GPO &#8599;</a></summary>
+<div class="fbody">
+<div class="fsechead">Scope &ndash; who and what this GPO applies to</div>
+<div class="scope"><table>
+<tr><th>Enabled?</th><td><span class="badge ok">ENABLED</span> &nbsp;All settings enabled.</td></tr>
+<tr><th>Applies to<br><span class="hint">which computers / users<br>(linked containers)</span></th><td>
+<ul class="links">
+<li>examplebank.local/Branches/Tellers</li>
+</ul>
+</td></tr>
+<tr><th>Filtered to<br><span class="hint">which users / groups /<br>computers get it applied</span></th><td>
+Authenticated Users, EXAMPLEBANK\Teller Workstations
+</td></tr>
+<tr><th>Excluded<br><span class="hint">explicit Deny Apply</span></th><td>EXAMPLEBANK\Branch Managers</td></tr>
+</table></div>
+<div class='fsechead'>Settings this GPO contributes to USB and removable storage restrictions</div>
+<table class="focustbl">
+<tr><td class='k'>All Removable Storage classes: Deny all access<div class='where'>Computer Config &middot; Policies\Administrative Templates\System\Removable Storage Access</div></td><td class='v'>Enabled</td></tr>
+<tr><td class='k'>CD and DVD: Deny execute access<div class='where'>Computer Config &middot; Policies\Administrative Templates\System\Removable Storage Access</div></td><td class='v'>Enabled</td></tr>
+</table></div></details>
+<details class='grow' data-applying='1'>
+<summary><span class='gname'>EXB - Workstation Security Baseline</span><span class='badge'>3 setting(s)</span><span class='where'>examplebank.local/Workstations; examplebank.local/Branches</span><a class='jump' href='#' onclick="event.stopPropagation();return gotoGpo('gpo-a1111111-2222-3333-4444-555555555501')">open full GPO &#8599;</a></summary>
+<div class="fbody">
+<div class="fsechead">Scope &ndash; who and what this GPO applies to</div>
+<div class="scope"><table>
+<tr><th>Enabled?</th><td><span class="badge ok">ENABLED</span> &nbsp;All settings enabled.</td></tr>
+<tr><th>Applies to<br><span class="hint">which computers / users<br>(linked containers)</span></th><td>
+<ul class="links">
+<li>examplebank.local/Workstations</li>
+<li>examplebank.local/Branches</li>
+</ul>
+</td></tr>
+<tr><th>Filtered to<br><span class="hint">which users / groups /<br>computers get it applied</span></th><td>
+Authenticated Users
+</td></tr>
+</table></div>
+<div class='fsechead'>Settings this GPO contributes to USB and removable storage restrictions</div>
+<table class="focustbl">
+<tr><td class='k'>Prevent installation of devices using drivers that match these device setup classes<div class='where'>Computer Config &middot; Policies\Administrative Templates\System\Device Installation\Device Installation Restrictions</div></td><td class='v'>Enabled</td></tr>
+<tr><td class='k'>All Removable Storage classes: Deny all access<div class='where'>Computer Config &middot; Policies\Administrative Templates\System\Removable Storage Access</div></td><td class='v'>Enabled</td></tr>
+<tr><td class='k'>Removable Disks: Deny write access<div class='where'>Computer Config &middot; Policies\Administrative Templates\System\Removable Storage Access</div></td><td class='v'>Enabled</td></tr>
+</table></div></details>
+</div>
+</div>
+<div class="area">
+<h3><span class='letter'>F</span> Logon banner - legal notice <span class='badge cnt'></span></h3>
+<div class='hint'>Both the message TEXT and the message TITLE must be set, or no banner is displayed.</div>
+<div class="missing noneMsg" style="display:none"></div>
+<div class="gpolist">
+<details class='grow' data-applying='1'>
+<summary><span class='gname'>EXB - Workstation Security Baseline</span><span class='badge'>2 setting(s)</span><span class='where'>examplebank.local/Workstations; examplebank.local/Branches</span><a class='jump' href='#' onclick="event.stopPropagation();return gotoGpo('gpo-a1111111-2222-3333-4444-555555555501')">open full GPO &#8599;</a></summary>
+<div class="fbody">
+<div class="fsechead">Scope &ndash; who and what this GPO applies to</div>
+<div class="scope"><table>
+<tr><th>Enabled?</th><td><span class="badge ok">ENABLED</span> &nbsp;All settings enabled.</td></tr>
+<tr><th>Applies to<br><span class="hint">which computers / users<br>(linked containers)</span></th><td>
+<ul class="links">
+<li>examplebank.local/Workstations</li>
+<li>examplebank.local/Branches</li>
+</ul>
+</td></tr>
+<tr><th>Filtered to<br><span class="hint">which users / groups /<br>computers get it applied</span></th><td>
+Authenticated Users
+</td></tr>
+</table></div>
+<div class='fsechead'>Settings this GPO contributes to Logon banner - legal notice</div>
+<table class="focustbl">
+<tr><td class='k'>Interactive logon: Message text for users attempting to log on<div class='where'>Computer Config &middot; Policies\Windows Settings\Security Settings\Local Policies\Security Options</div></td><td class='v'>This system is the property of Example Bank and is for authorized business use only. Activity on this system is monitored and recorded.</td></tr>
+<tr><td class='k'>Interactive logon: Message title for users attempting to log on<div class='where'>Computer Config &middot; Policies\Windows Settings\Security Settings\Local Policies\Security Options</div></td><td class='v'>AUTHORIZED USE NOTICE</td></tr>
+</table></div></details>
+</div>
+</div>
+</section>
+<section class="view" id="view-logon">
+<h1>User logon restrictions</h1>
+<div class="sub">When an account may sign in (logonHours), which computers it may sign in from (logonWorkstations), and when the account expires. These are per-USER attributes in Active Directory, not Group Policy settings, so they are read from AD rather than from the GPOs.</div>
+<div style="height:14px"></div>
+<div class="stats">
+<div class='stat'><b>23</b><span>Users examined</span></div>
+<div class='stat'><b>5</b><span>Restricted &amp; enabled</span></div>
+<div class='stat'><b>4</b><span>Hour restricted</span></div>
+<div class='stat'><b>1</b><span>Can never sign in</span></div>
+<div class='stat'><b>4</b><span>Workstation restricted</span></div>
+<div class='stat'><b>2</b><span>Account expires</span></div>
+<div class='stat'><b>2</b><span>Disabled (hidden)</span></div>
+</div>
+<div class='lhlegend'><span><i style='background:var(--accent)'></i>Sign-in allowed</span><span><i style='background:var(--chip)'></i>Sign-in denied</span><span>Each cell is one hour; rows are days, columns run 00:00 &rarr; 23:00 in <b>Etc/UTC (UTC+0)</b>.</span></div>
+<div class='sub' style='margin:-6px 0 12px'>2 disabled account(s) also carry restrictions and are hidden below &ndash; tick <b>Include disabled accounts</b> to show them.</div>
+<div class="tblbar">
+<input type="search" id="qLogon" placeholder="Filter by name, account, OU, workstation or schedule...">
+<select id="fLogon">
+<option value="all">All restricted accounts</option>
+<option value="hours">Hour restricted</option>
+<option value="never">Can never sign in</option>
+<option value="ws">Workstation restricted</option>
+<option value="exp">Account expires</option>
+</select>
+<label style='color:var(--mut);display:flex;gap:6px;align-items:center;cursor:pointer'><input type='checkbox' id='fLogonDis'> Include disabled accounts (2)</label>
+<span class='sub'><b id='cnt-logon'>5</b> shown</span></div>
+<div id="tbl-logon">
+<div class='lhuser' data-k='Alex Reyes areyes OU=Branches,DC=examplebank,DC=local TLR-MAIN-01,TLR-MAIN-02 Sun None   Mon-Fri 07:00-20:00   Sat None' data-hours='1' data-never='0' data-ws='1' data-exp='0' data-enabled='1'>
+<div class="lhwho"><h4>
+Alex Reyes
+<span class='badge warn'>65 of 168 hours</span>
+<span class="badge warn">Workstation limited</span>
+</h4>
+<div class='sam'>areyes</div>
+<div class="lhmeta">
+<div><b>Allowed hours</b>Sun None &middot; Mon-Fri 07:00-20:00 &middot; Sat None</div>
+<div><b>Workstations</b>TLR-MAIN-01,TLR-MAIN-02</div>
+<div><b>Last logon</b>2026-09-19</div>
+<div><b>OU</b>OU=Branches,DC=examplebank,DC=local</div>
+</div></div>
+<div class="lhgrid">
+<span></span>
+<span class='hr'>00</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>03</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>06</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>09</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>12</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>15</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>18</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>21</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='day'>Sun</span>
+<i class='' title='Sunday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Sunday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Sunday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Sunday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Sunday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Sunday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Sunday 06:00-07:00 &ndash; Denied'></i>
+<i class='' title='Sunday 07:00-08:00 &ndash; Denied'></i>
+<i class='' title='Sunday 08:00-09:00 &ndash; Denied'></i>
+<i class='' title='Sunday 09:00-10:00 &ndash; Denied'></i>
+<i class='' title='Sunday 10:00-11:00 &ndash; Denied'></i>
+<i class='' title='Sunday 11:00-12:00 &ndash; Denied'></i>
+<i class='' title='Sunday 12:00-13:00 &ndash; Denied'></i>
+<i class='' title='Sunday 13:00-14:00 &ndash; Denied'></i>
+<i class='' title='Sunday 14:00-15:00 &ndash; Denied'></i>
+<i class='' title='Sunday 15:00-16:00 &ndash; Denied'></i>
+<i class='' title='Sunday 16:00-17:00 &ndash; Denied'></i>
+<i class='' title='Sunday 17:00-18:00 &ndash; Denied'></i>
+<i class='' title='Sunday 18:00-19:00 &ndash; Denied'></i>
+<i class='' title='Sunday 19:00-20:00 &ndash; Denied'></i>
+<i class='' title='Sunday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Sunday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Sunday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Sunday 23:00-24:00 &ndash; Denied'></i>
+<span class='day'>Mon</span>
+<i class='' title='Monday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Monday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Monday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Monday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Monday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Monday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Monday 06:00-07:00 &ndash; Denied'></i>
+<i class='on' title='Monday 07:00-08:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 08:00-09:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 09:00-10:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 10:00-11:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 11:00-12:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 12:00-13:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 13:00-14:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 14:00-15:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 15:00-16:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 16:00-17:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 17:00-18:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 18:00-19:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 19:00-20:00 &ndash; Allowed'></i>
+<i class='' title='Monday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Monday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Monday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Monday 23:00-24:00 &ndash; Denied'></i>
+<span class='day'>Tue</span>
+<i class='' title='Tuesday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 06:00-07:00 &ndash; Denied'></i>
+<i class='on' title='Tuesday 07:00-08:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 08:00-09:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 09:00-10:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 10:00-11:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 11:00-12:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 12:00-13:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 13:00-14:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 14:00-15:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 15:00-16:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 16:00-17:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 17:00-18:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 18:00-19:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 19:00-20:00 &ndash; Allowed'></i>
+<i class='' title='Tuesday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 23:00-24:00 &ndash; Denied'></i>
+<span class='day'>Wed</span>
+<i class='' title='Wednesday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 06:00-07:00 &ndash; Denied'></i>
+<i class='on' title='Wednesday 07:00-08:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 08:00-09:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 09:00-10:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 10:00-11:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 11:00-12:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 12:00-13:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 13:00-14:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 14:00-15:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 15:00-16:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 16:00-17:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 17:00-18:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 18:00-19:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 19:00-20:00 &ndash; Allowed'></i>
+<i class='' title='Wednesday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 23:00-24:00 &ndash; Denied'></i>
+<span class='day'>Thu</span>
+<i class='' title='Thursday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Thursday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Thursday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Thursday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Thursday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Thursday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Thursday 06:00-07:00 &ndash; Denied'></i>
+<i class='on' title='Thursday 07:00-08:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 08:00-09:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 09:00-10:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 10:00-11:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 11:00-12:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 12:00-13:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 13:00-14:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 14:00-15:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 15:00-16:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 16:00-17:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 17:00-18:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 18:00-19:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 19:00-20:00 &ndash; Allowed'></i>
+<i class='' title='Thursday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Thursday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Thursday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Thursday 23:00-24:00 &ndash; Denied'></i>
+<span class='day'>Fri</span>
+<i class='' title='Friday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Friday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Friday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Friday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Friday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Friday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Friday 06:00-07:00 &ndash; Denied'></i>
+<i class='on' title='Friday 07:00-08:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 08:00-09:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 09:00-10:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 10:00-11:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 11:00-12:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 12:00-13:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 13:00-14:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 14:00-15:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 15:00-16:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 16:00-17:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 17:00-18:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 18:00-19:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 19:00-20:00 &ndash; Allowed'></i>
+<i class='' title='Friday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Friday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Friday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Friday 23:00-24:00 &ndash; Denied'></i>
+<span class='day'>Sat</span>
+<i class='' title='Saturday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Saturday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Saturday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Saturday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Saturday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Saturday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Saturday 06:00-07:00 &ndash; Denied'></i>
+<i class='' title='Saturday 07:00-08:00 &ndash; Denied'></i>
+<i class='' title='Saturday 08:00-09:00 &ndash; Denied'></i>
+<i class='' title='Saturday 09:00-10:00 &ndash; Denied'></i>
+<i class='' title='Saturday 10:00-11:00 &ndash; Denied'></i>
+<i class='' title='Saturday 11:00-12:00 &ndash; Denied'></i>
+<i class='' title='Saturday 12:00-13:00 &ndash; Denied'></i>
+<i class='' title='Saturday 13:00-14:00 &ndash; Denied'></i>
+<i class='' title='Saturday 14:00-15:00 &ndash; Denied'></i>
+<i class='' title='Saturday 15:00-16:00 &ndash; Denied'></i>
+<i class='' title='Saturday 16:00-17:00 &ndash; Denied'></i>
+<i class='' title='Saturday 17:00-18:00 &ndash; Denied'></i>
+<i class='' title='Saturday 18:00-19:00 &ndash; Denied'></i>
+<i class='' title='Saturday 19:00-20:00 &ndash; Denied'></i>
+<i class='' title='Saturday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Saturday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Saturday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Saturday 23:00-24:00 &ndash; Denied'></i>
+</div>
+</div>
+<div class='lhuser' data-k='Devon Park dpark OU=Branches,DC=examplebank,DC=local TLR-DRV-01 Sun None   Mon-Fri 07:00-20:00   Sat None' data-hours='1' data-never='0' data-ws='1' data-exp='0' data-enabled='1'>
+<div class="lhwho"><h4>
+Devon Park
+<span class='badge warn'>65 of 168 hours</span>
+<span class="badge warn">Workstation limited</span>
+</h4>
+<div class='sam'>dpark</div>
+<div class="lhmeta">
+<div><b>Allowed hours</b>Sun None &middot; Mon-Fri 07:00-20:00 &middot; Sat None</div>
+<div><b>Workstations</b>TLR-DRV-01</div>
+<div><b>Last logon</b>2026-09-17</div>
+<div><b>OU</b>OU=Branches,DC=examplebank,DC=local</div>
+</div></div>
+<div class="lhgrid">
+<span></span>
+<span class='hr'>00</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>03</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>06</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>09</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>12</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>15</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>18</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>21</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='day'>Sun</span>
+<i class='' title='Sunday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Sunday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Sunday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Sunday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Sunday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Sunday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Sunday 06:00-07:00 &ndash; Denied'></i>
+<i class='' title='Sunday 07:00-08:00 &ndash; Denied'></i>
+<i class='' title='Sunday 08:00-09:00 &ndash; Denied'></i>
+<i class='' title='Sunday 09:00-10:00 &ndash; Denied'></i>
+<i class='' title='Sunday 10:00-11:00 &ndash; Denied'></i>
+<i class='' title='Sunday 11:00-12:00 &ndash; Denied'></i>
+<i class='' title='Sunday 12:00-13:00 &ndash; Denied'></i>
+<i class='' title='Sunday 13:00-14:00 &ndash; Denied'></i>
+<i class='' title='Sunday 14:00-15:00 &ndash; Denied'></i>
+<i class='' title='Sunday 15:00-16:00 &ndash; Denied'></i>
+<i class='' title='Sunday 16:00-17:00 &ndash; Denied'></i>
+<i class='' title='Sunday 17:00-18:00 &ndash; Denied'></i>
+<i class='' title='Sunday 18:00-19:00 &ndash; Denied'></i>
+<i class='' title='Sunday 19:00-20:00 &ndash; Denied'></i>
+<i class='' title='Sunday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Sunday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Sunday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Sunday 23:00-24:00 &ndash; Denied'></i>
+<span class='day'>Mon</span>
+<i class='' title='Monday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Monday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Monday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Monday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Monday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Monday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Monday 06:00-07:00 &ndash; Denied'></i>
+<i class='on' title='Monday 07:00-08:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 08:00-09:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 09:00-10:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 10:00-11:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 11:00-12:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 12:00-13:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 13:00-14:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 14:00-15:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 15:00-16:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 16:00-17:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 17:00-18:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 18:00-19:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 19:00-20:00 &ndash; Allowed'></i>
+<i class='' title='Monday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Monday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Monday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Monday 23:00-24:00 &ndash; Denied'></i>
+<span class='day'>Tue</span>
+<i class='' title='Tuesday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 06:00-07:00 &ndash; Denied'></i>
+<i class='on' title='Tuesday 07:00-08:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 08:00-09:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 09:00-10:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 10:00-11:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 11:00-12:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 12:00-13:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 13:00-14:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 14:00-15:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 15:00-16:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 16:00-17:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 17:00-18:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 18:00-19:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 19:00-20:00 &ndash; Allowed'></i>
+<i class='' title='Tuesday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 23:00-24:00 &ndash; Denied'></i>
+<span class='day'>Wed</span>
+<i class='' title='Wednesday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 06:00-07:00 &ndash; Denied'></i>
+<i class='on' title='Wednesday 07:00-08:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 08:00-09:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 09:00-10:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 10:00-11:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 11:00-12:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 12:00-13:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 13:00-14:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 14:00-15:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 15:00-16:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 16:00-17:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 17:00-18:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 18:00-19:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 19:00-20:00 &ndash; Allowed'></i>
+<i class='' title='Wednesday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 23:00-24:00 &ndash; Denied'></i>
+<span class='day'>Thu</span>
+<i class='' title='Thursday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Thursday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Thursday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Thursday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Thursday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Thursday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Thursday 06:00-07:00 &ndash; Denied'></i>
+<i class='on' title='Thursday 07:00-08:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 08:00-09:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 09:00-10:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 10:00-11:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 11:00-12:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 12:00-13:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 13:00-14:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 14:00-15:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 15:00-16:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 16:00-17:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 17:00-18:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 18:00-19:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 19:00-20:00 &ndash; Allowed'></i>
+<i class='' title='Thursday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Thursday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Thursday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Thursday 23:00-24:00 &ndash; Denied'></i>
+<span class='day'>Fri</span>
+<i class='' title='Friday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Friday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Friday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Friday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Friday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Friday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Friday 06:00-07:00 &ndash; Denied'></i>
+<i class='on' title='Friday 07:00-08:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 08:00-09:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 09:00-10:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 10:00-11:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 11:00-12:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 12:00-13:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 13:00-14:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 14:00-15:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 15:00-16:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 16:00-17:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 17:00-18:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 18:00-19:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 19:00-20:00 &ndash; Allowed'></i>
+<i class='' title='Friday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Friday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Friday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Friday 23:00-24:00 &ndash; Denied'></i>
+<span class='day'>Sat</span>
+<i class='' title='Saturday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Saturday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Saturday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Saturday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Saturday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Saturday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Saturday 06:00-07:00 &ndash; Denied'></i>
+<i class='' title='Saturday 07:00-08:00 &ndash; Denied'></i>
+<i class='' title='Saturday 08:00-09:00 &ndash; Denied'></i>
+<i class='' title='Saturday 09:00-10:00 &ndash; Denied'></i>
+<i class='' title='Saturday 10:00-11:00 &ndash; Denied'></i>
+<i class='' title='Saturday 11:00-12:00 &ndash; Denied'></i>
+<i class='' title='Saturday 12:00-13:00 &ndash; Denied'></i>
+<i class='' title='Saturday 13:00-14:00 &ndash; Denied'></i>
+<i class='' title='Saturday 14:00-15:00 &ndash; Denied'></i>
+<i class='' title='Saturday 15:00-16:00 &ndash; Denied'></i>
+<i class='' title='Saturday 16:00-17:00 &ndash; Denied'></i>
+<i class='' title='Saturday 17:00-18:00 &ndash; Denied'></i>
+<i class='' title='Saturday 18:00-19:00 &ndash; Denied'></i>
+<i class='' title='Saturday 19:00-20:00 &ndash; Denied'></i>
+<i class='' title='Saturday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Saturday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Saturday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Saturday 23:00-24:00 &ndash; Denied'></i>
+</div>
+</div>
+<div class='lhuser' data-k='External Auditor auditor.ext OU=Staff,DC=examplebank,DC=local  Any hour of any day' data-hours='0' data-never='0' data-ws='0' data-exp='1' data-enabled='1'>
+<div class="lhwho"><h4>
+External Auditor
+<span class="badge warn">Expires</span>
+</h4>
+<div class='sam'>auditor.ext</div>
+<div class="lhmeta">
+<div><b>Allowed hours</b>Any hour of any day</div>
+<div><b>Workstations</b>Any computer in the domain</div>
+<div><b>Account expires</b>2026-10-11</div>
+<div><b>Last logon</b>2026-09-14</div>
+<div><b>OU</b>OU=Staff,DC=examplebank,DC=local</div>
+</div></div>
+<div class="lhnohours">No hour restriction &ndash; may sign in at any time</div>
+</div>
+<div class='lhuser' data-k='Legacy Core Svc svc.legacycore OU=Service Accounts,DC=examplebank,DC=local  Sun-Sat None' data-hours='1' data-never='1' data-ws='0' data-exp='0' data-enabled='0'>
+<div class="lhwho"><h4>
+Legacy Core Svc
+<span class="badge bad">Can never sign in</span>
+<span class="badge bad">Disabled</span>
+</h4>
+<div class='sam'>svc.legacycore</div>
+<div class="lhmeta">
+<div><b>Allowed hours</b>Sun-Sat None</div>
+<div><b>Workstations</b>Any computer in the domain</div>
+<div><b>Last logon</b>2025-07-17</div>
+<div><b>OU</b>OU=Service Accounts,DC=examplebank,DC=local</div>
+</div></div>
+<div class="lhgrid">
+<span></span>
+<span class='hr'>00</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>03</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>06</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>09</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>12</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>15</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>18</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>21</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='day'>Sun</span>
+<i class='' title='Sunday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Sunday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Sunday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Sunday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Sunday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Sunday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Sunday 06:00-07:00 &ndash; Denied'></i>
+<i class='' title='Sunday 07:00-08:00 &ndash; Denied'></i>
+<i class='' title='Sunday 08:00-09:00 &ndash; Denied'></i>
+<i class='' title='Sunday 09:00-10:00 &ndash; Denied'></i>
+<i class='' title='Sunday 10:00-11:00 &ndash; Denied'></i>
+<i class='' title='Sunday 11:00-12:00 &ndash; Denied'></i>
+<i class='' title='Sunday 12:00-13:00 &ndash; Denied'></i>
+<i class='' title='Sunday 13:00-14:00 &ndash; Denied'></i>
+<i class='' title='Sunday 14:00-15:00 &ndash; Denied'></i>
+<i class='' title='Sunday 15:00-16:00 &ndash; Denied'></i>
+<i class='' title='Sunday 16:00-17:00 &ndash; Denied'></i>
+<i class='' title='Sunday 17:00-18:00 &ndash; Denied'></i>
+<i class='' title='Sunday 18:00-19:00 &ndash; Denied'></i>
+<i class='' title='Sunday 19:00-20:00 &ndash; Denied'></i>
+<i class='' title='Sunday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Sunday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Sunday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Sunday 23:00-24:00 &ndash; Denied'></i>
+<span class='day'>Mon</span>
+<i class='' title='Monday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Monday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Monday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Monday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Monday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Monday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Monday 06:00-07:00 &ndash; Denied'></i>
+<i class='' title='Monday 07:00-08:00 &ndash; Denied'></i>
+<i class='' title='Monday 08:00-09:00 &ndash; Denied'></i>
+<i class='' title='Monday 09:00-10:00 &ndash; Denied'></i>
+<i class='' title='Monday 10:00-11:00 &ndash; Denied'></i>
+<i class='' title='Monday 11:00-12:00 &ndash; Denied'></i>
+<i class='' title='Monday 12:00-13:00 &ndash; Denied'></i>
+<i class='' title='Monday 13:00-14:00 &ndash; Denied'></i>
+<i class='' title='Monday 14:00-15:00 &ndash; Denied'></i>
+<i class='' title='Monday 15:00-16:00 &ndash; Denied'></i>
+<i class='' title='Monday 16:00-17:00 &ndash; Denied'></i>
+<i class='' title='Monday 17:00-18:00 &ndash; Denied'></i>
+<i class='' title='Monday 18:00-19:00 &ndash; Denied'></i>
+<i class='' title='Monday 19:00-20:00 &ndash; Denied'></i>
+<i class='' title='Monday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Monday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Monday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Monday 23:00-24:00 &ndash; Denied'></i>
+<span class='day'>Tue</span>
+<i class='' title='Tuesday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 06:00-07:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 07:00-08:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 08:00-09:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 09:00-10:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 10:00-11:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 11:00-12:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 12:00-13:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 13:00-14:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 14:00-15:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 15:00-16:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 16:00-17:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 17:00-18:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 18:00-19:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 19:00-20:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 23:00-24:00 &ndash; Denied'></i>
+<span class='day'>Wed</span>
+<i class='' title='Wednesday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 06:00-07:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 07:00-08:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 08:00-09:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 09:00-10:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 10:00-11:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 11:00-12:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 12:00-13:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 13:00-14:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 14:00-15:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 15:00-16:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 16:00-17:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 17:00-18:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 18:00-19:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 19:00-20:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 23:00-24:00 &ndash; Denied'></i>
+<span class='day'>Thu</span>
+<i class='' title='Thursday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Thursday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Thursday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Thursday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Thursday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Thursday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Thursday 06:00-07:00 &ndash; Denied'></i>
+<i class='' title='Thursday 07:00-08:00 &ndash; Denied'></i>
+<i class='' title='Thursday 08:00-09:00 &ndash; Denied'></i>
+<i class='' title='Thursday 09:00-10:00 &ndash; Denied'></i>
+<i class='' title='Thursday 10:00-11:00 &ndash; Denied'></i>
+<i class='' title='Thursday 11:00-12:00 &ndash; Denied'></i>
+<i class='' title='Thursday 12:00-13:00 &ndash; Denied'></i>
+<i class='' title='Thursday 13:00-14:00 &ndash; Denied'></i>
+<i class='' title='Thursday 14:00-15:00 &ndash; Denied'></i>
+<i class='' title='Thursday 15:00-16:00 &ndash; Denied'></i>
+<i class='' title='Thursday 16:00-17:00 &ndash; Denied'></i>
+<i class='' title='Thursday 17:00-18:00 &ndash; Denied'></i>
+<i class='' title='Thursday 18:00-19:00 &ndash; Denied'></i>
+<i class='' title='Thursday 19:00-20:00 &ndash; Denied'></i>
+<i class='' title='Thursday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Thursday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Thursday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Thursday 23:00-24:00 &ndash; Denied'></i>
+<span class='day'>Fri</span>
+<i class='' title='Friday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Friday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Friday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Friday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Friday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Friday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Friday 06:00-07:00 &ndash; Denied'></i>
+<i class='' title='Friday 07:00-08:00 &ndash; Denied'></i>
+<i class='' title='Friday 08:00-09:00 &ndash; Denied'></i>
+<i class='' title='Friday 09:00-10:00 &ndash; Denied'></i>
+<i class='' title='Friday 10:00-11:00 &ndash; Denied'></i>
+<i class='' title='Friday 11:00-12:00 &ndash; Denied'></i>
+<i class='' title='Friday 12:00-13:00 &ndash; Denied'></i>
+<i class='' title='Friday 13:00-14:00 &ndash; Denied'></i>
+<i class='' title='Friday 14:00-15:00 &ndash; Denied'></i>
+<i class='' title='Friday 15:00-16:00 &ndash; Denied'></i>
+<i class='' title='Friday 16:00-17:00 &ndash; Denied'></i>
+<i class='' title='Friday 17:00-18:00 &ndash; Denied'></i>
+<i class='' title='Friday 18:00-19:00 &ndash; Denied'></i>
+<i class='' title='Friday 19:00-20:00 &ndash; Denied'></i>
+<i class='' title='Friday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Friday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Friday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Friday 23:00-24:00 &ndash; Denied'></i>
+<span class='day'>Sat</span>
+<i class='' title='Saturday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Saturday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Saturday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Saturday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Saturday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Saturday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Saturday 06:00-07:00 &ndash; Denied'></i>
+<i class='' title='Saturday 07:00-08:00 &ndash; Denied'></i>
+<i class='' title='Saturday 08:00-09:00 &ndash; Denied'></i>
+<i class='' title='Saturday 09:00-10:00 &ndash; Denied'></i>
+<i class='' title='Saturday 10:00-11:00 &ndash; Denied'></i>
+<i class='' title='Saturday 11:00-12:00 &ndash; Denied'></i>
+<i class='' title='Saturday 12:00-13:00 &ndash; Denied'></i>
+<i class='' title='Saturday 13:00-14:00 &ndash; Denied'></i>
+<i class='' title='Saturday 14:00-15:00 &ndash; Denied'></i>
+<i class='' title='Saturday 15:00-16:00 &ndash; Denied'></i>
+<i class='' title='Saturday 16:00-17:00 &ndash; Denied'></i>
+<i class='' title='Saturday 17:00-18:00 &ndash; Denied'></i>
+<i class='' title='Saturday 18:00-19:00 &ndash; Denied'></i>
+<i class='' title='Saturday 19:00-20:00 &ndash; Denied'></i>
+<i class='' title='Saturday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Saturday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Saturday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Saturday 23:00-24:00 &ndash; Denied'></i>
+</div>
+</div>
+<div class='lhuser' data-k='Noor Haddad nhaddad OU=Branches,DC=examplebank,DC=local TLR-MAIN-02 Any hour of any day' data-hours='0' data-never='0' data-ws='1' data-exp='0' data-enabled='1'>
+<div class="lhwho"><h4>
+Noor Haddad
+<span class="badge warn">Workstation limited</span>
+</h4>
+<div class='sam'>nhaddad</div>
+<div class="lhmeta">
+<div><b>Allowed hours</b>Any hour of any day</div>
+<div><b>Workstations</b>TLR-MAIN-02</div>
+<div><b>Last logon</b>2026-09-19</div>
+<div><b>OU</b>OU=Branches,DC=examplebank,DC=local</div>
+</div></div>
+<div class="lhnohours">No hour restriction &ndash; may sign in at any time</div>
+</div>
+<div class='lhuser' data-k='Sam Whitfield swhitfield OU=Branches,DC=examplebank,DC=local TLR-MAIN-01,TLR-MAIN-03 Sun None   Mon-Fri 07:00-20:00   Sat None' data-hours='1' data-never='0' data-ws='1' data-exp='0' data-enabled='1'>
+<div class="lhwho"><h4>
+Sam Whitfield
+<span class='badge warn'>65 of 168 hours</span>
+<span class="badge warn">Workstation limited</span>
+</h4>
+<div class='sam'>swhitfield</div>
+<div class="lhmeta">
+<div><b>Allowed hours</b>Sun None &middot; Mon-Fri 07:00-20:00 &middot; Sat None</div>
+<div><b>Workstations</b>TLR-MAIN-01,TLR-MAIN-03</div>
+<div><b>Last logon</b>2026-09-19</div>
+<div><b>OU</b>OU=Branches,DC=examplebank,DC=local</div>
+</div></div>
+<div class="lhgrid">
+<span></span>
+<span class='hr'>00</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>03</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>06</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>09</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>12</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>15</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>18</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='hr'>21</span>
+<span class='hr'></span>
+<span class='hr'></span>
+<span class='day'>Sun</span>
+<i class='' title='Sunday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Sunday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Sunday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Sunday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Sunday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Sunday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Sunday 06:00-07:00 &ndash; Denied'></i>
+<i class='' title='Sunday 07:00-08:00 &ndash; Denied'></i>
+<i class='' title='Sunday 08:00-09:00 &ndash; Denied'></i>
+<i class='' title='Sunday 09:00-10:00 &ndash; Denied'></i>
+<i class='' title='Sunday 10:00-11:00 &ndash; Denied'></i>
+<i class='' title='Sunday 11:00-12:00 &ndash; Denied'></i>
+<i class='' title='Sunday 12:00-13:00 &ndash; Denied'></i>
+<i class='' title='Sunday 13:00-14:00 &ndash; Denied'></i>
+<i class='' title='Sunday 14:00-15:00 &ndash; Denied'></i>
+<i class='' title='Sunday 15:00-16:00 &ndash; Denied'></i>
+<i class='' title='Sunday 16:00-17:00 &ndash; Denied'></i>
+<i class='' title='Sunday 17:00-18:00 &ndash; Denied'></i>
+<i class='' title='Sunday 18:00-19:00 &ndash; Denied'></i>
+<i class='' title='Sunday 19:00-20:00 &ndash; Denied'></i>
+<i class='' title='Sunday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Sunday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Sunday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Sunday 23:00-24:00 &ndash; Denied'></i>
+<span class='day'>Mon</span>
+<i class='' title='Monday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Monday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Monday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Monday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Monday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Monday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Monday 06:00-07:00 &ndash; Denied'></i>
+<i class='on' title='Monday 07:00-08:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 08:00-09:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 09:00-10:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 10:00-11:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 11:00-12:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 12:00-13:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 13:00-14:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 14:00-15:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 15:00-16:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 16:00-17:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 17:00-18:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 18:00-19:00 &ndash; Allowed'></i>
+<i class='on' title='Monday 19:00-20:00 &ndash; Allowed'></i>
+<i class='' title='Monday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Monday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Monday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Monday 23:00-24:00 &ndash; Denied'></i>
+<span class='day'>Tue</span>
+<i class='' title='Tuesday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 06:00-07:00 &ndash; Denied'></i>
+<i class='on' title='Tuesday 07:00-08:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 08:00-09:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 09:00-10:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 10:00-11:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 11:00-12:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 12:00-13:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 13:00-14:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 14:00-15:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 15:00-16:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 16:00-17:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 17:00-18:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 18:00-19:00 &ndash; Allowed'></i>
+<i class='on' title='Tuesday 19:00-20:00 &ndash; Allowed'></i>
+<i class='' title='Tuesday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Tuesday 23:00-24:00 &ndash; Denied'></i>
+<span class='day'>Wed</span>
+<i class='' title='Wednesday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 06:00-07:00 &ndash; Denied'></i>
+<i class='on' title='Wednesday 07:00-08:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 08:00-09:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 09:00-10:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 10:00-11:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 11:00-12:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 12:00-13:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 13:00-14:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 14:00-15:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 15:00-16:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 16:00-17:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 17:00-18:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 18:00-19:00 &ndash; Allowed'></i>
+<i class='on' title='Wednesday 19:00-20:00 &ndash; Allowed'></i>
+<i class='' title='Wednesday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Wednesday 23:00-24:00 &ndash; Denied'></i>
+<span class='day'>Thu</span>
+<i class='' title='Thursday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Thursday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Thursday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Thursday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Thursday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Thursday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Thursday 06:00-07:00 &ndash; Denied'></i>
+<i class='on' title='Thursday 07:00-08:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 08:00-09:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 09:00-10:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 10:00-11:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 11:00-12:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 12:00-13:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 13:00-14:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 14:00-15:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 15:00-16:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 16:00-17:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 17:00-18:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 18:00-19:00 &ndash; Allowed'></i>
+<i class='on' title='Thursday 19:00-20:00 &ndash; Allowed'></i>
+<i class='' title='Thursday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Thursday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Thursday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Thursday 23:00-24:00 &ndash; Denied'></i>
+<span class='day'>Fri</span>
+<i class='' title='Friday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Friday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Friday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Friday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Friday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Friday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Friday 06:00-07:00 &ndash; Denied'></i>
+<i class='on' title='Friday 07:00-08:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 08:00-09:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 09:00-10:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 10:00-11:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 11:00-12:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 12:00-13:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 13:00-14:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 14:00-15:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 15:00-16:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 16:00-17:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 17:00-18:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 18:00-19:00 &ndash; Allowed'></i>
+<i class='on' title='Friday 19:00-20:00 &ndash; Allowed'></i>
+<i class='' title='Friday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Friday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Friday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Friday 23:00-24:00 &ndash; Denied'></i>
+<span class='day'>Sat</span>
+<i class='' title='Saturday 00:00-01:00 &ndash; Denied'></i>
+<i class='' title='Saturday 01:00-02:00 &ndash; Denied'></i>
+<i class='' title='Saturday 02:00-03:00 &ndash; Denied'></i>
+<i class='' title='Saturday 03:00-04:00 &ndash; Denied'></i>
+<i class='' title='Saturday 04:00-05:00 &ndash; Denied'></i>
+<i class='' title='Saturday 05:00-06:00 &ndash; Denied'></i>
+<i class='' title='Saturday 06:00-07:00 &ndash; Denied'></i>
+<i class='' title='Saturday 07:00-08:00 &ndash; Denied'></i>
+<i class='' title='Saturday 08:00-09:00 &ndash; Denied'></i>
+<i class='' title='Saturday 09:00-10:00 &ndash; Denied'></i>
+<i class='' title='Saturday 10:00-11:00 &ndash; Denied'></i>
+<i class='' title='Saturday 11:00-12:00 &ndash; Denied'></i>
+<i class='' title='Saturday 12:00-13:00 &ndash; Denied'></i>
+<i class='' title='Saturday 13:00-14:00 &ndash; Denied'></i>
+<i class='' title='Saturday 14:00-15:00 &ndash; Denied'></i>
+<i class='' title='Saturday 15:00-16:00 &ndash; Denied'></i>
+<i class='' title='Saturday 16:00-17:00 &ndash; Denied'></i>
+<i class='' title='Saturday 17:00-18:00 &ndash; Denied'></i>
+<i class='' title='Saturday 18:00-19:00 &ndash; Denied'></i>
+<i class='' title='Saturday 19:00-20:00 &ndash; Denied'></i>
+<i class='' title='Saturday 20:00-21:00 &ndash; Denied'></i>
+<i class='' title='Saturday 21:00-22:00 &ndash; Denied'></i>
+<i class='' title='Saturday 22:00-23:00 &ndash; Denied'></i>
+<i class='' title='Saturday 23:00-24:00 &ndash; Denied'></i>
+</div>
+</div>
+<div class='lhuser' data-k='Seasonal Teller tmp.seasonal OU=Branches,DC=examplebank,DC=local  Any hour of any day' data-hours='0' data-never='0' data-ws='0' data-exp='1' data-enabled='0'>
+<div class="lhwho"><h4>
+Seasonal Teller
+<span class="badge warn">Expires</span>
+<span class="badge bad">Disabled</span>
+</h4>
+<div class='sam'>tmp.seasonal</div>
+<div class="lhmeta">
+<div><b>Allowed hours</b>Any hour of any day</div>
+<div><b>Workstations</b>Any computer in the domain</div>
+<div><b>Account expires</b>2026-10-20</div>
+<div><b>Last logon</b>2026-06-16</div>
+<div><b>OU</b>OU=Branches,DC=examplebank,DC=local</div>
+</div></div>
+<div class="lhnohours">No hour restriction &ndash; may sign in at any time</div>
+</div>
+</div>
+</section>
+<section class="view" id="view-pwdrestrict">
+<h1>Password restrictions</h1>
+<div class="sub">What restricts the <b>content</b> of a password in this domain &ndash; banned words, dictionaries, breached-password checks &ndash; as opposed to its length and age, which are on Focus area A. In Active Directory these are never Group Policy settings: they are password filter DLLs registered with the LSA and loaded by every domain controller on each password change.</div>
+<div class="stats">
+<div class='stat'><b>2</b><span>Products detected</span></div>
+<div class='stat'><b>4</b><span>Filters registered</span></div>
+<div class='stat'><b>1</b><span>Word lists readable</span></div>
+<div class='stat'><b>0</b><span>Related GPO settings</span></div>
+<div class='stat'><b>2</b><span>Fine-grained policies</span></div>
+</div>
+<div class='ok-note'><b>Customization is in force.</b> 2 password-restriction product(s) and 2 non-default filter(s) were detected on this domain controller. What each one enforces is below; anything it holds in an encrypted or proprietary store has to be exported from that product for the committee packet.</div>
+<h2>Password restriction products detected</h2>
+<div class="sub">Each product is looked for four ways &ndash; the filter DLL registered with the LSA, its own registry key, its Windows service, and (for Entra) its DC agent event log. Any one is enough, so a renamed or undocumented DLL does not produce a false negative. The <b>Detected by</b> column shows which signals actually fired.</div>
+<table class="grid"><thead><tr><th style="width:19%">Product</th><th style="width:12%">Vendor</th><th style="width:13%">Mode</th><th style="width:22%">Detected by</th><th>What it restricts / where the word list lives</th></tr></thead><tbody>
+<tr><td><b>Microsoft Entra Password Protection</b></td><td>Microsoft</td><td><span class='badge bad'>Audit only - nothing is blocked</span></td><td>password filter registered with the LSA<br>product registry key present<br>service installed: AzureADPasswordProtectionDCAgent<br>DC agent event log reports a policy state</td><td>Scores a password against the Microsoft global banned-password list and the tenant custom banned word list, with fuzzy matching and character substitution. Runs in Audit or Enforce mode - the mode is reported below, because a deployment left in Audit blocks nothing.<div class='hint' style='margin:6px 0 0'>Microsoft global banned list + tenant CUSTOM banned list. Cached on the DC in encrypted form - export it from the Entra admin center (Protection &gt; Authentication methods &gt; Password protection).</div></td></tr>
+<tr><td><b>PassFiltEx (open source)</b></td><td>Joseph Ryan Ries (open source)</td><td><span class="mut">&ndash;</span></td><td>password filter registered with the LSA<br>product registry key present</td><td>Blocks any password containing a string from a plain-text blacklist file, with configurable token matching.<div class='hint' style='margin:6px 0 0'>Plain-text blacklist file in System32 - printed in full below when it can be read.</div></td></tr>
+</tbody></table>
+<div class="missing" style="margin-top:10px"><b>Entra Password Protection is in AUDIT ONLY mode.</b> Weak and banned passwords are logged but <i>accepted</i>. Nothing is being blocked. Switch the tenant policy to Enforced once the audit period has been reviewed.</div>
+<h2>Password filters registered on the domain controller</h2>
+<div class='sub'>Read from <span class='mono'>HKLM\SYSTEM\CurrentControlSet\Control\Lsa\Notification Packages</span> &mdash; Local registry on DC01.</div>
+<table class="grid"><thead><tr><th style="width:15%">DLL</th><th style="width:22%">Product</th><th style="width:11%">Restricts content?</th><th>What it enforces</th></tr></thead><tbody>
+<tr><td class='mono'>scecli</td><td>Windows built-in complexity (default)</td><td><span class='badge'>No</span></td><td>The standard Windows filter. When &quot;Password must meet complexity requirements&quot; is enabled it blocks passwords containing the account name or any three-or-more character token of the display name, and requires three of five character categories. It has NO configurable word list.</td></tr>
+<tr><td class='mono'>rassfm</td><td>Windows RAS / SFM (default)</td><td><span class='badge'>No</span></td><td>Ships with Windows. Not a password-content restriction.</td></tr>
+<tr><td class='mono'>AzureADPasswordProtectionDCFilter</td><td>Microsoft Entra Password Protection</td><td><span class='badge ok'>Yes</span></td><td>Scores a password against the Microsoft global banned-password list and the tenant custom banned word list, with fuzzy matching and character substitution. Runs in Audit or Enforce mode - the mode is reported below, because a deployment left in Audit blocks nothing.</td></tr>
+<tr><td class='mono'>PassFiltEx</td><td>PassFiltEx (open source)</td><td><span class='badge ok'>Yes</span></td><td>Blocks any password containing a string from a plain-text blacklist file, with configurable token matching.</td></tr>
+</tbody></table>
+<h2>Banned / restricted word lists</h2>
+<div class="area">
+<h3 style='font-size:14px'>PassFiltEx (open source) <span class='badge'>46 entries</span></h3>
+<div class='hint' style='margin-left:0'><span class='mono'>/tmp/samplewin/System32/PassFiltExBlacklist.txt</span></div>
+<div class="wordlist">
+<span class='word'>examplebank</span>
+<span class='word'>example bank</span>
+<span class='word'>exbank</span>
+<span class='word'>exb</span>
+<span class='word'>mainstreet</span>
+<span class='word'>main street</span>
+<span class='word'>drive-up</span>
+<span class='word'>driveup</span>
+<span class='word'>teller</span>
+<span class='word'>vault</span>
+<span class='word'>branch</span>
+<span class='word'>lobby</span>
+<span class='word'>deposit</span>
+<span class='word'>checking</span>
+<span class='word'>savings</span>
+<span class='word'>loan</span>
+<span class='word'>mortgage</span>
+<span class='word'>escrow</span>
+<span class='word'>password</span>
+<span class='word'>passw0rd</span>
+<span class='word'>welcome</span>
+<span class='word'>changeme</span>
+<span class='word'>letmein</span>
+<span class='word'>abc123</span>
+<span class='word'>qwerty</span>
+<span class='word'>monkey</span>
+<span class='word'>dragon</span>
+<span class='word'>summer</span>
+<span class='word'>autumn</span>
+<span class='word'>winter</span>
+<span class='word'>spring</span>
+<span class='word'>january</span>
+<span class='word'>february</span>
+<span class='word'>march</span>
+<span class='word'>april</span>
+<span class='word'>fall2026</span>
+<span class='word'>summer2026</span>
+<span class='word'>winter2026</span>
+<span class='word'>spring2026</span>
+<span class='word'>football</span>
+<span class='word'>baseball</span>
+<span class='word'>sunshine</span>
+<span class='word'>princess</span>
+<span class='word'>iloveyou</span>
+<span class='word'>admin</span>
+<span class='word'>administrator</span>
+</div>
+</div>
+<h2>Product configuration</h2>
+<div class="area">
+<h3 style='font-size:14px'>Microsoft Entra Password Protection</h3>
+<div class='hint' style='margin-left:0'><span class='mono'>HKLM\SOFTWARE\Microsoft\Azure AD Password Protection</span></div>
+<table class="grid"><thead><tr><th style="width:34%">Setting</th><th>Value</th></tr></thead><tbody>
+<tr><td class='mono'>AzureADPasswordProtectionDCAgentVersion</td><td class='mono'>1.2.177.1</td></tr>
+<tr><td class='mono'>ServiceStartMode</td><td class='mono'>Automatic</td></tr>
+<tr><td class='mono'>PolicyCachePath</td><td class='mono'>C:\Windows\SYSVOL\domain\AzureADPasswordProtection</td></tr>
+</tbody></table>
+</div>
+<div class="area">
+<h3 style='font-size:14px'>PassFiltEx (open source)</h3>
+<div class='hint' style='margin-left:0'><span class='mono'>HKLM\SOFTWARE\PassFiltEx</span></div>
+<table class="grid"><thead><tr><th style="width:34%">Setting</th><th>Value</th></tr></thead><tbody>
+<tr><td class='mono'>BlacklistFileName</td><td class='mono'>PassFiltExBlacklist.txt</td></tr>
+<tr><td class='mono'>TokenPercentageOfPassword</td><td class='mono'>60</td></tr>
+<tr><td class='mono'>RequireCharClasses</td><td class='mono'>0</td></tr>
+</tbody></table>
+</div>
+<h2>Group Policy settings that reference password content</h2>
+<div class="sub">Settings whose container, name or value mentions a banned or prohibited word list, a dictionary, a passphrase rule, a breached-password check, or a known third-party password product.</div>
+<div class="missing">No Group Policy setting in this domain references any of these. If you run Specops, nFront, Netwrix/Anixis or Lithnet, their settings live in their own ADMX namespace &ndash; confirm the GPO is linked and applying.</div>
+<h2>The built-in complexity rule</h2>
+<table class="grid"><thead><tr><th style="width:26%">GPO</th><th style="width:34%">Setting</th><th>Value</th></tr></thead><tbody>
+<tr><td>Default Domain Policy</td><td>PasswordComplexity</td><td class='mono'>Enabled</td></tr>
+</tbody></table>
+<div class="hint" style="margin-left:0">When complexity is enabled, Windows itself rejects a password that contains the account&rsquo;s sAMAccountName, or any three-or-more character token of the display name, and requires characters from three of the five categories (uppercase, lowercase, digit, symbol, Unicode). That is the full extent of the built-in content restriction &ndash; it has no configurable word list, it does not check a dictionary, and it does not know whether the password has been breached.</div>
+<h2>Fine-grained password policies</h2>
+<div class='sub'>2 fine-grained policy(ies) are defined &ndash; these set length, age, history and lockout for specific groups, but like the domain policy they cannot ban specific words. Full detail is on <a href='#' onclick="return show('focus'),false">Focus area A</a>.</div>
+<table class="grid"><thead><tr><th>Policy</th><th>Precedence</th><th>Min length</th><th>Complexity</th><th>Applies to</th></tr></thead><tbody>
+<tr><td>PSO-PrivilegedAccounts</td><td>10</td><td>18</td><td>Enabled</td><td>Domain Admins, Tier0 Admins</td></tr>
+<tr><td>PSO-ServiceAccounts</td><td>20</td><td>25</td><td>Enabled</td><td>Service Accounts</td></tr>
+</tbody></table>
+</section>
+<section class="view" id="view-priv">
+<h1>Privileged group membership</h1>
+<div class="sub">Effective membership, including users inherited through nested groups. Disabled accounts, non-expiring passwords and stale logons are flagged.</div>
+<div style="height:16px"></div>
+<div class="grp">
+<h3>
+Administrators
+<span class='badge'>Administrators (built-in)</span>
+<span class='badge'>examplebank.local</span>
+<span class='badge'>5 member(s)</span>
+<span class='badge warn'>1 password never expires</span>
+</h3>
+<table><tr><th>Member</th><th>Account</th><th>Membership</th><th>Account state</th><th>Password last set</th><th>Last logon</th></tr>
+<tr><td>adm.contractor</td><td class='mono'>adm.contractor</td><td><span class="badge warn">Nested</span></td><td><span class="badge ok">Enabled</span> </td><td data-s="2026-09-17">2026-09-17</td><td data-s="2026-09-19">2026-09-19</td></tr>
+<tr><td>adm.jmercer</td><td class='mono'>adm.jmercer</td><td>Direct</td><td><span class="badge ok">Enabled</span> </td><td data-s="2026-08-30">2026-08-30</td><td data-s="2026-09-19">2026-09-19</td></tr>
+<tr><td>adm.tokafor</td><td class='mono'>adm.tokafor</td><td>Direct</td><td><span class="badge ok">Enabled</span> </td><td data-s="2026-09-08">2026-09-08</td><td data-s="2026-09-18">2026-09-18</td></tr>
+<tr><td>Administrator</td><td class='mono'>administrator</td><td>Direct</td><td><span class="badge ok">Enabled</span> </td><td data-s="2026-08-11">2026-08-11</td><td data-s="2026-09-18">2026-09-18</td></tr>
+<tr><td>svc.backup</td><td class='mono'>svc.backup</td><td><span class="badge warn">Nested</span></td><td><span class="badge ok">Enabled</span> <span class="badge warn">Password never expires</span></td><td data-s="2024-09-10">2024-09-10</td><td data-s="2026-09-20">2026-09-20</td></tr>
+</table>
+<div class='nested'><b>Nested groups:</b> Tier0 Admins</div>
+</div>
+<div class="grp">
+<h3>
+Domain Admins
+<span class='badge'>Domain Admins</span>
+<span class='badge'>examplebank.local</span>
+<span class='badge'>4 member(s)</span>
+<span class='badge warn'>1 password never expires</span>
+</h3>
+<table><tr><th>Member</th><th>Account</th><th>Membership</th><th>Account state</th><th>Password last set</th><th>Last logon</th></tr>
+<tr><td>adm.contractor</td><td class='mono'>adm.contractor</td><td>Direct</td><td><span class="badge ok">Enabled</span> </td><td data-s="2026-09-17">2026-09-17</td><td data-s="2026-09-19">2026-09-19</td></tr>
+<tr><td>adm.jmercer</td><td class='mono'>adm.jmercer</td><td>Direct</td><td><span class="badge ok">Enabled</span> </td><td data-s="2026-08-30">2026-08-30</td><td data-s="2026-09-19">2026-09-19</td></tr>
+<tr><td>adm.tokafor</td><td class='mono'>adm.tokafor</td><td>Direct</td><td><span class="badge ok">Enabled</span> </td><td data-s="2026-09-08">2026-09-08</td><td data-s="2026-09-18">2026-09-18</td></tr>
+<tr><td>svc.backup</td><td class='mono'>svc.backup</td><td>Direct</td><td><span class="badge ok">Enabled</span> <span class="badge warn">Password never expires</span></td><td data-s="2024-09-10">2024-09-10</td><td data-s="2026-09-20">2026-09-20</td></tr>
+</table>
+</div>
+<div class="grp">
+<h3>
+Enterprise Admins
+<span class='badge'>Enterprise Admins</span>
+<span class='badge'>examplebank.local (forest root)</span>
+<span class='badge'>1 member(s)</span>
+</h3>
+<table><tr><th>Member</th><th>Account</th><th>Membership</th><th>Account state</th><th>Password last set</th><th>Last logon</th></tr>
+<tr><td>adm.jmercer</td><td class='mono'>adm.jmercer</td><td>Direct</td><td><span class="badge ok">Enabled</span> </td><td data-s="2026-08-30">2026-08-30</td><td data-s="2026-09-19">2026-09-19</td></tr>
+</table>
+</div>
+<div class="grp">
+<h3>
+Schema Admins
+<span class='badge'>Schema Admins</span>
+<span class='badge'>examplebank.local (forest root)</span>
+<span class='badge'>0 member(s)</span>
+</h3>
+<div class="nested">No members.</div>
+</div>
+</section>
+<section class="view" id="view-gpos">
+<h1>All GPOs</h1>
+<div class="toolbar">
+<input type="search" id="q" placeholder="Search GPO name, container path, setting name or value...">
+<select id="fLink"><option value="all">All GPOs</option><option value="linked">Linked only</option><option value="unlinked">Unlinked only</option></select>
+<label><input type="checkbox" id="fSet"> Hide GPOs with no settings</label>
+<button id="bExpand" type="button">Expand all</button><button id="bCollapse" type="button">Collapse all</button>
+<span class="sub"><b id="shown">0</b> shown</span>
+</div>
+<div class="stats">
+<div class='stat'><b>5</b><span>GPOs</span></div>
+<div class='stat'><b>33</b><span>Configured settings</span></div>
+<div class='stat'><b>4</b><span>Linked</span></div>
+<div class='stat'><b>1</b><span>Unlinked</span></div>
+<div class='stat'><b>0</b><span>Empty (no settings)</span></div>
+</div>
+<details class='gpo' id='gpo-31b2f340-016d-11d2-945f-00c04fb984f9' data-name='Default Domain Policy 31b2f340-016d-11d2-945f-00c04fb984f9' data-linked='1' data-settings='9'>
+<summary>
+<span class='gname'>Default Domain Policy</span>
+<span class='badge'>9 settings</span>
+<span class='badge ok'>1 link(s)</span>
+<a class='gpmc' href='PerGPO/Default%20Domain%20Policy.html' target='_blank' onclick='event.stopPropagation()'>full GPMC report &#8599;</a>
+</summary>
+<div class="body">
+<div class="scope"><table>
+<tr><th>Enabled?</th><td><span class="badge ok">ENABLED</span> &nbsp;All settings enabled.</td></tr>
+<tr><th>Applies to<br><span class="hint">which computers / users<br>(linked containers)</span></th><td>
+<ul class="links">
+<li>examplebank.local</li>
+</ul>
+</td></tr>
+<tr><th>Filtered to<br><span class="hint">which users / groups /<br>computers get it applied</span></th><td>
+Authenticated Users
+</td></tr>
+</table></div>
+<details class='side'><summary>Computer Configuration (9 setting(s))</summary>
+<details class='cont' data-k='Policies\Windows Settings\Security Settings\Account Policies\Account Lockout Policy LockoutBadCount LockoutDuration ResetLockoutCount'><summary><span class='path'>Policies\Windows Settings\Security Settings\Account Policies\Account Lockout Policy</span><span class='cnt'>(3)</span></summary>
+<table class="settings">
+<tr class='setting' data-k='LockoutBadCount 5 failed attempts'><td class='k'>LockoutBadCount</td><td class='v'>5 failed attempts</td></tr>
+<tr class='setting' data-k='LockoutDuration 0.5 hours  (30 minutes)'><td class='k'>LockoutDuration</td><td class='v'>0.5 hours  (30 minutes)</td></tr>
+<tr class='setting' data-k='ResetLockoutCount 0.5 hours  (30 minutes)'><td class='k'>ResetLockoutCount</td><td class='v'>0.5 hours  (30 minutes)</td></tr>
+</table></details>
+<details class='cont' data-k='Policies\Windows Settings\Security Settings\Account Policies\Password Policy MinimumPasswordLength MaximumPasswordAge MinimumPasswordAge PasswordHistorySize PasswordComplexity ClearTextPassword'><summary><span class='path'>Policies\Windows Settings\Security Settings\Account Policies\Password Policy</span><span class='cnt'>(6)</span></summary>
+<table class="settings">
+<tr class='setting' data-k='ClearTextPassword Disabled'><td class='k'>ClearTextPassword</td><td class='v'>Disabled</td></tr>
+<tr class='setting' data-k='MaximumPasswordAge 90 days'><td class='k'>MaximumPasswordAge</td><td class='v'>90 days</td></tr>
+<tr class='setting' data-k='MinimumPasswordAge 1 day'><td class='k'>MinimumPasswordAge</td><td class='v'>1 day</td></tr>
+<tr class='setting' data-k='MinimumPasswordLength 12 characters'><td class='k'>MinimumPasswordLength</td><td class='v'>12 characters</td></tr>
+<tr class='setting' data-k='PasswordComplexity Enabled'><td class='k'>PasswordComplexity</td><td class='v'>Enabled</td></tr>
+<tr class='setting' data-k='PasswordHistorySize 24 passwords remembered'><td class='k'>PasswordHistorySize</td><td class='v'>24 passwords remembered</td></tr>
+</table></details>
+</details>
+<details class='side'><summary>User Configuration (0 setting(s))</summary>
+<div class="empty">No settings configured.</div>
+</details>
+</div></details>
+<details class='gpo' id='gpo-a1111111-2222-3333-4444-555555555504' data-name='EXB - Legacy Core Client (retired) a1111111-2222-3333-4444-555555555504' data-linked='0' data-settings='1'>
+<summary>
+<span class='gname'>EXB - Legacy Core Client (retired)</span>
+<span class='badge'>1 settings</span>
+<span class='badge bad'>Unlinked</span>
+<span class='badge warn'>AllSettingsDisabled</span>
+<a class='gpmc' href='PerGPO/EXB%20-%20Legacy%20Core%20Client%20%28retired%29.html' target='_blank' onclick='event.stopPropagation()'>full GPMC report &#8599;</a>
+</summary>
+<div class="body">
+<div class="scope"><table>
+<tr><th>Enabled?</th><td><span class="badge bad">NOT APPLYING</span> &nbsp;GPO status is All settings disabled.</td></tr>
+<tr><th>Applies to<br><span class="hint">which computers / users<br>(linked containers)</span></th><td>
+<span class="badge bad">Nothing &ndash; not linked to any site, domain or OU</span>
+</td></tr>
+<tr><th>Filtered to<br><span class="hint">which users / groups /<br>computers get it applied</span></th><td>
+Authenticated Users
+</td></tr>
+</table></div>
+<details class='side'><summary>Computer Configuration (1 setting(s))</summary>
+<details class='cont' data-k='Policies\Administrative Templates\Windows Components\Internet Explorer\Internet Control Panel\Security Page\Intranet Zone Allow file downloads'><summary><span class='path'>Policies\Administrative Templates\Windows Components\Internet Explorer\Internet Control Panel\Security Page\Intranet Zone</span><span class='cnt'>(1)</span></summary>
+<table class="settings">
+<tr class='setting' data-k='Allow file downloads Enabled'><td class='k'>Allow file downloads</td><td class='v'>Enabled</td></tr>
+</table></details>
+</details>
+<details class='side'><summary>User Configuration (0 setting(s))</summary>
+<div class="empty">No settings configured.</div>
+</details>
+</div></details>
+<details class='gpo' id='gpo-a1111111-2222-3333-4444-555555555502' data-name='EXB - Server Hardening Baseline a1111111-2222-3333-4444-555555555502' data-linked='1' data-settings='9'>
+<summary>
+<span class='gname'>EXB - Server Hardening Baseline</span>
+<span class='badge'>9 settings</span>
+<span class='badge ok'>2 link(s)</span>
+<span class='badge warn'>Enforced</span>
+<span class='badge warn'>UserSettingsDisabled</span>
+<span class='badge warn'>WMI: Windows Server 2022</span>
+<a class='gpmc' href='PerGPO/EXB%20-%20Server%20Hardening%20Baseline.html' target='_blank' onclick='event.stopPropagation()'>full GPMC report &#8599;</a>
+</summary>
+<div class="body">
+<div class="scope"><table>
+<tr><th>Enabled?</th><td><span class="badge ok">ENABLED</span> &nbsp;User half of this GPO is disabled &ndash; only Computer settings apply.</td></tr>
+<tr><th>Applies to<br><span class="hint">which computers / users<br>(linked containers)</span></th><td>
+<ul class="links">
+<li>examplebank.local/Servers <span class="badge warn">ENFORCED</span></li>
+<li>examplebank.local/Domain Controllers</li>
+</ul>
+</td></tr>
+<tr><th>Filtered to<br><span class="hint">which users / groups /<br>computers get it applied</span></th><td>
+Authenticated Users
+</td></tr>
+<tr><th>WMI filter<br><span class="hint">further narrows targets</span></th><td>Windows Server 2022</td></tr>
+</table></div>
+<details class='side'><summary>Computer Configuration (9 setting(s))</summary>
+<details class='cont' data-k='Advanced Audit Configuration Audit Credential Validation Audit Security Group Management Audit Logon'><summary><span class='path'>Advanced Audit Configuration</span><span class='cnt'>(3)</span></summary>
+<table class="settings">
+<tr class='setting' data-k='Audit Credential Validation PolicyTarget: System  |  SubcategoryName: Audit Credential Validation  |  SubcategoryGuid: {0cce923f-69ae-11d9-bed3-505054503030}  |  SettingValue: 3'><td class='k'>Audit Credential Validation</td><td class='v'>PolicyTarget: System  |  SubcategoryName: Audit Credential Validation  |  SubcategoryGuid: {0cce923f-69ae-11d9-bed3-505054503030}  |  SettingValue: 3</td></tr>
+<tr class='setting' data-k='Audit Logon PolicyTarget: System  |  SubcategoryName: Audit Logon  |  SubcategoryGuid: {0cce9215-69ae-11d9-bed3-505054503030}  |  SettingValue: 3'><td class='k'>Audit Logon</td><td class='v'>PolicyTarget: System  |  SubcategoryName: Audit Logon  |  SubcategoryGuid: {0cce9215-69ae-11d9-bed3-505054503030}  |  SettingValue: 3</td></tr>
+<tr class='setting' data-k='Audit Security Group Management PolicyTarget: System  |  SubcategoryName: Audit Security Group Management  |  SubcategoryGuid: {0cce9237-69ae-11d9-bed3-505054503030}  |  SettingValue: 3'><td class='k'>Audit Security Group Management</td><td class='v'>PolicyTarget: System  |  SubcategoryName: Audit Security Group Management  |  SubcategoryGuid: {0cce9237-69ae-11d9-bed3-505054503030}  |  SettingValue: 3</td></tr>
+</table></details>
+<details class='cont' data-k='Policies\Windows Settings\Security Settings\Local Policies\Audit Policy AuditLogonEvents AuditAccountManage AuditPolicyChange'><summary><span class='path'>Policies\Windows Settings\Security Settings\Local Policies\Audit Policy</span><span class='cnt'>(3)</span></summary>
+<table class="settings">
+<tr class='setting' data-k='AuditAccountManage Success, Failure'><td class='k'>AuditAccountManage</td><td class='v'>Success, Failure</td></tr>
+<tr class='setting' data-k='AuditLogonEvents Success, Failure'><td class='k'>AuditLogonEvents</td><td class='v'>Success, Failure</td></tr>
+<tr class='setting' data-k='AuditPolicyChange Success, Failure'><td class='k'>AuditPolicyChange</td><td class='v'>Success, Failure</td></tr>
+</table></details>
+<details class='cont' data-k='Policies\Windows Settings\Security Settings\Local Policies\Security Options Security event log: Maximum log size (KB)'><summary><span class='path'>Policies\Windows Settings\Security Settings\Local Policies\Security Options</span><span class='cnt'>(1)</span></summary>
+<table class="settings">
+<tr class='setting' data-k='Security event log: Maximum log size (KB) 1048576'><td class='k'>Security event log: Maximum log size (KB)</td><td class='v'>1048576</td></tr>
+</table></details>
+<details class='cont' data-k='Policies\Windows Settings\Security Settings\Local Policies\User Rights Assignment SeDenyNetworkLogonRight'><summary><span class='path'>Policies\Windows Settings\Security Settings\Local Policies\User Rights Assignment</span><span class='cnt'>(1)</span></summary>
+<table class="settings">
+<tr class='setting' data-k='SeDenyNetworkLogonRight EXAMPLEBANK\Domain Admins; BUILTIN\Guests'><td class='k'>SeDenyNetworkLogonRight</td><td class='v'>EXAMPLEBANK\Domain Admins; BUILTIN\Guests</td></tr>
+</table></details>
+<details class='cont' data-k='Policies\Windows Settings\Security Settings\System Services RemoteRegistry'><summary><span class='path'>Policies\Windows Settings\Security Settings\System Services</span><span class='cnt'>(1)</span></summary>
+<table class="settings">
+<tr class='setting' data-k='RemoteRegistry Startup mode: Disabled'><td class='k'>RemoteRegistry</td><td class='v'>Startup mode: Disabled</td></tr>
+</table></details>
+</details>
+<details class='side'><summary>User Configuration (0 setting(s))</summary>
+<div class="empty">No settings configured.</div>
+</details>
+</div></details>
+<details class='gpo' id='gpo-a1111111-2222-3333-4444-555555555503' data-name='EXB - Teller Workstation Lockdown a1111111-2222-3333-4444-555555555503' data-linked='1' data-settings='4'>
+<summary>
+<span class='gname'>EXB - Teller Workstation Lockdown</span>
+<span class='badge'>4 settings</span>
+<span class='badge ok'>1 link(s)</span>
+<a class='gpmc' href='PerGPO/EXB%20-%20Teller%20Workstation%20Lockdown.html' target='_blank' onclick='event.stopPropagation()'>full GPMC report &#8599;</a>
+</summary>
+<div class="body">
+<div class="scope"><table>
+<tr><th>Enabled?</th><td><span class="badge ok">ENABLED</span> &nbsp;All settings enabled.</td></tr>
+<tr><th>Applies to<br><span class="hint">which computers / users<br>(linked containers)</span></th><td>
+<ul class="links">
+<li>examplebank.local/Branches/Tellers</li>
+</ul>
+</td></tr>
+<tr><th>Filtered to<br><span class="hint">which users / groups /<br>computers get it applied</span></th><td>
+Authenticated Users, EXAMPLEBANK\Teller Workstations
+</td></tr>
+<tr><th>Excluded<br><span class="hint">explicit Deny Apply</span></th><td>EXAMPLEBANK\Branch Managers</td></tr>
+</table></div>
+<details class='side'><summary>Computer Configuration (2 setting(s))</summary>
+<details class='cont' data-k='Policies\Administrative Templates\System\Removable Storage Access All Removable Storage classes: Deny all access CD and DVD: Deny execute access'><summary><span class='path'>Policies\Administrative Templates\System\Removable Storage Access</span><span class='cnt'>(2)</span></summary>
+<table class="settings">
+<tr class='setting' data-k='All Removable Storage classes: Deny all access Enabled'><td class='k'>All Removable Storage classes: Deny all access</td><td class='v'>Enabled</td></tr>
+<tr class='setting' data-k='CD and DVD: Deny execute access Enabled'><td class='k'>CD and DVD: Deny execute access</td><td class='v'>Enabled</td></tr>
+</table></details>
+</details>
+<details class='side'><summary>User Configuration (2 setting(s))</summary>
+<details class='cont' data-k='Policies\Administrative Templates\System Prevent access to registry editing tools'><summary><span class='path'>Policies\Administrative Templates\System</span><span class='cnt'>(1)</span></summary>
+<table class="settings">
+<tr class='setting' data-k='Prevent access to registry editing tools Enabled'><td class='k'>Prevent access to registry editing tools</td><td class='v'>Enabled</td></tr>
+</table></details>
+<details class='cont' data-k='Policies\Administrative Templates\Windows Components\Remote Desktop Services\Remote Desktop Session Host\Session Time Limits Set time limit for active but idle Remote Desktop Services sessions'><summary><span class='path'>Policies\Administrative Templates\Windows Components\Remote Desktop Services\Remote Desktop Session Host\Session Time Limits</span><span class='cnt'>(1)</span></summary>
+<table class="settings">
+<tr class='setting' data-k='Set time limit for active but idle Remote Desktop Services sessions Enabled  |  Idle session limit: 15 minutes'><td class='k'>Set time limit for active but idle Remote Desktop Services sessions</td><td class='v'>Enabled  |  Idle session limit: 15 minutes</td></tr>
+</table></details>
+</details>
+</div></details>
+<details class='gpo' id='gpo-a1111111-2222-3333-4444-555555555501' data-name='EXB - Workstation Security Baseline a1111111-2222-3333-4444-555555555501' data-linked='1' data-settings='10'>
+<summary>
+<span class='gname'>EXB - Workstation Security Baseline</span>
+<span class='badge'>10 settings</span>
+<span class='badge ok'>2 link(s)</span>
+<a class='gpmc' href='PerGPO/EXB%20-%20Workstation%20Security%20Baseline.html' target='_blank' onclick='event.stopPropagation()'>full GPMC report &#8599;</a>
+</summary>
+<div class="body">
+<div class="scope"><table>
+<tr><th>Enabled?</th><td><span class="badge ok">ENABLED</span> &nbsp;All settings enabled.</td></tr>
+<tr><th>Applies to<br><span class="hint">which computers / users<br>(linked containers)</span></th><td>
+<ul class="links">
+<li>examplebank.local/Workstations</li>
+<li>examplebank.local/Branches</li>
+</ul>
+</td></tr>
+<tr><th>Filtered to<br><span class="hint">which users / groups /<br>computers get it applied</span></th><td>
+Authenticated Users
+</td></tr>
+</table></div>
+<details class='side'><summary>Computer Configuration (9 setting(s))</summary>
+<details class='cont' data-k='Policies\Administrative Templates\Control Panel\Personalization Screen saver timeout Password protect the screen saver'><summary><span class='path'>Policies\Administrative Templates\Control Panel\Personalization</span><span class='cnt'>(2)</span></summary>
+<table class="settings">
+<tr class='setting' data-k='Password protect the screen saver Enabled'><td class='k'>Password protect the screen saver</td><td class='v'>Enabled</td></tr>
+<tr class='setting' data-k='Screen saver timeout Enabled  |  Seconds: 900'><td class='k'>Screen saver timeout</td><td class='v'>Enabled  |  Seconds: 900</td></tr>
+</table></details>
+<details class='cont' data-k='Policies\Administrative Templates\System\Device Installation\Device Installation Restrictions Prevent installation of devices using drivers that match these device setup classes'><summary><span class='path'>Policies\Administrative Templates\System\Device Installation\Device Installation Restrictions</span><span class='cnt'>(1)</span></summary>
+<table class="settings">
+<tr class='setting' data-k='Prevent installation of devices using drivers that match these device setup classes Enabled'><td class='k'>Prevent installation of devices using drivers that match these device setup classes</td><td class='v'>Enabled</td></tr>
+</table></details>
+<details class='cont' data-k='Policies\Administrative Templates\System\Removable Storage Access All Removable Storage classes: Deny all access Removable Disks: Deny write access'><summary><span class='path'>Policies\Administrative Templates\System\Removable Storage Access</span><span class='cnt'>(2)</span></summary>
+<table class="settings">
+<tr class='setting' data-k='All Removable Storage classes: Deny all access Enabled'><td class='k'>All Removable Storage classes: Deny all access</td><td class='v'>Enabled</td></tr>
+<tr class='setting' data-k='Removable Disks: Deny write access Enabled'><td class='k'>Removable Disks: Deny write access</td><td class='v'>Enabled</td></tr>
+</table></details>
+<details class='cont' data-k='Policies\Windows Settings\Security Settings\Local Policies\Security Options Interactive logon: Machine inactivity limit Network security: LAN Manager authentication level Interactive logon: Message title for users attempting to log on Interactive logon: Message text for users attempting to log on'><summary><span class='path'>Policies\Windows Settings\Security Settings\Local Policies\Security Options</span><span class='cnt'>(4)</span></summary>
+<table class="settings">
+<tr class='setting' data-k='Interactive logon: Machine inactivity limit 1800'><td class='k'>Interactive logon: Machine inactivity limit</td><td class='v'>1800</td></tr>
+<tr class='setting' data-k='Interactive logon: Message text for users attempting to log on This system is the property of Example Bank and is for authorized business use only. Activity on this system is monitored and recorded.'><td class='k'>Interactive logon: Message text for users attempting to log on</td><td class='v'>This system is the property of Example Bank and is for authorized business use only. Activity on this system is monitored and recorded.</td></tr>
+<tr class='setting' data-k='Interactive logon: Message title for users attempting to log on AUTHORIZED USE NOTICE'><td class='k'>Interactive logon: Message title for users attempting to log on</td><td class='v'>AUTHORIZED USE NOTICE</td></tr>
+<tr class='setting' data-k='Network security: LAN Manager authentication level Send NTLMv2 response only. Refuse LM and NTLM'><td class='k'>Network security: LAN Manager authentication level</td><td class='v'>Send NTLMv2 response only. Refuse LM and NTLM</td></tr>
+</table></details>
+</details>
+<details class='side'><summary>User Configuration (1 setting(s))</summary>
+<details class='cont' data-k='Policies\Administrative Templates\Control Panel\Personalization Do not display the lock screen'><summary><span class='path'>Policies\Administrative Templates\Control Panel\Personalization</span><span class='cnt'>(1)</span></summary>
+<table class="settings">
+<tr class='setting' data-k='Do not display the lock screen Enabled'><td class='k'>Do not display the lock screen</td><td class='v'>Enabled</td></tr>
+</table></details>
+</details>
+</div></details>
+</section>
+<section class="view" id="view-scope">
+<h1>Scope index &ndash; GPOs by container</h1>
+<div class="sub">Every link in the domain, by scope of management.</div><div style="height:14px"></div>
+<div class="appendix"><table><tr><th>Container / SOM path</th><th>GPO</th><th>Link enabled</th><th>Enforced</th><th>Settings</th></tr>
+<tr><td>examplebank.local</td><td><a href='#' onclick="return gotoGpo('gpo-31b2f340-016d-11d2-945f-00c04fb984f9')">Default Domain Policy</a></td><td>true</td><td>false</td><td>9</td></tr>
+<tr><td>examplebank.local/Branches</td><td><a href='#' onclick="return gotoGpo('gpo-a1111111-2222-3333-4444-555555555501')">EXB - Workstation Security Baseline</a></td><td>true</td><td>false</td><td>10</td></tr>
+<tr><td>examplebank.local/Branches/Tellers</td><td><a href='#' onclick="return gotoGpo('gpo-a1111111-2222-3333-4444-555555555503')">EXB - Teller Workstation Lockdown</a></td><td>true</td><td>false</td><td>4</td></tr>
+<tr><td>examplebank.local/Domain Controllers</td><td><a href='#' onclick="return gotoGpo('gpo-a1111111-2222-3333-4444-555555555502')">EXB - Server Hardening Baseline</a></td><td>true</td><td>false</td><td>9</td></tr>
+<tr><td>examplebank.local/Servers</td><td><a href='#' onclick="return gotoGpo('gpo-a1111111-2222-3333-4444-555555555502')">EXB - Server Hardening Baseline</a></td><td>true</td><td>true</td><td>9</td></tr>
+<tr><td>examplebank.local/Workstations</td><td><a href='#' onclick="return gotoGpo('gpo-a1111111-2222-3333-4444-555555555501')">EXB - Workstation Security Baseline</a></td><td>true</td><td>false</td><td>10</td></tr>
+</table></div></section>
+<section class="view" id="view-unlinked">
+<h1>Unlinked GPOs</h1>
+<div class="sub">These GPOs are not linked to any site, domain or OU, so nothing they contain is applying.</div><div style="height:14px"></div>
+<div class="appendix"><table><tr><th>GPO</th><th>Settings</th><th>Modified</th></tr>
+<tr><td><a href='#' onclick="return gotoGpo('gpo-a1111111-2222-3333-4444-555555555504')">EXB - Legacy Core Client (retired)</a></td><td>1</td><td>06/30/2023 00:00:00</td></tr>
+</table></div>
+</section>
+<section class="view" id="view-cl-disabled">
+<h1>Disabled users</h1>
+<div class='sub'>5 of 23 user accounts in the domain are disabled. Disabled accounts still hold group memberships and permissions until they are removed.</div>
+<div class='verified'>Verified: every one of the 5 accounts listed below returned Enabled = False from Active Directory. No enabled account appears on this page.</div>
+<div class="sub" style="margin-top:8px">Built-in accounts such as Guest, DefaultAccount and krbtgt are disabled by design and are expected to appear here.</div>
+<div class="tblbar"><input class="tblq" type="search" data-target="#tbl-disabled" data-count="cnt-disabled" placeholder="Filter by name, account, OU or description...">
+<span class='sub'><b id='cnt-disabled'>5</b> shown</span></div>
+<table class="tbl" id="tbl-disabled"><tr><th>Name</th><th>Account</th><th>Account state</th><th>Privileged</th><th>Last logon</th><th>Idle</th><th>Password last set</th><th>OU</th><th>Description</th></tr>
+<tr class='row' data-k='Dana Whitcombe dwhitcombe OU=Staff,DC=examplebank,DC=local Departed 2026-02 - pending removal &lt;span class=&quot;mut&quot;&gt;&amp;ndash;&lt;/span&gt;'><td>Dana Whitcombe</td><td class='mono'>dwhitcombe</td><td><span class="badge bad">Disabled</span></td><td data-s=''><span class="mut">&ndash;</span></td><td data-s="2026-02-18">2026-02-18</td><td data-s="214"><span class="days"><span class="badge warn">214 days</span></span></td><td data-s="2025-08-15">2025-08-15</td><td class='mono'>OU=Staff,DC=examplebank,DC=local</td><td>Departed 2026-02 - pending removal</td></tr>
+<tr class='row' data-k='Former Contractor cont.former OU=Staff,DC=examplebank,DC=local Contract ended 2025-11 &lt;span class=&quot;mut&quot;&gt;&amp;ndash;&lt;/span&gt;'><td>Former Contractor</td><td class='mono'>cont.former</td><td><span class="badge bad">Disabled</span></td><td data-s=''><span class="mut">&ndash;</span></td><td data-s="1000-01-01"><span class="badge bad">never</span></td><td data-s="1096"><span class="days"><span class="badge bad">1096 days</span></span></td><td data-s="1000-01-01"><span class="badge bad">never</span></td><td class='mono'>OU=Staff,DC=examplebank,DC=local</td><td>Contract ended 2025-11</td></tr>
+<tr class='row' data-k='Legacy Core Svc svc.legacycore OU=Service Accounts,DC=examplebank,DC=local Retired with legacy core &lt;span class=&quot;mut&quot;&gt;&amp;ndash;&lt;/span&gt;'><td>Legacy Core Svc</td><td class='mono'>svc.legacycore</td><td><span class="badge bad">Disabled</span></td><td data-s=''><span class="mut">&ndash;</span></td><td data-s="2025-07-17">2025-07-17</td><td data-s="430"><span class="days"><span class="badge bad">430 days</span></span></td><td data-s="2024-04-23">2024-04-23</td><td class='mono'>OU=Service Accounts,DC=examplebank,DC=local</td><td>Retired with legacy core</td></tr>
+<tr class='row' data-k='Robin Vance (admin) adm.rvance OU=Admin Accounts,DC=examplebank,DC=local Privileged account - CFO &lt;span class=&quot;mut&quot;&gt;&amp;ndash;&lt;/span&gt;'><td>Robin Vance (admin)</td><td class='mono'>adm.rvance</td><td><span class="badge bad">Disabled</span></td><td data-s=''><span class="mut">&ndash;</span></td><td data-s="2026-08-10">2026-08-10</td><td data-s="41"><span class="days">41 days</span></td><td data-s="2026-07-21">2026-07-21</td><td class='mono'>OU=Admin Accounts,DC=examplebank,DC=local</td><td>Privileged account - CFO</td></tr>
+<tr class='row' data-k='Seasonal Teller tmp.seasonal OU=Branches,DC=examplebank,DC=local Seasonal help - summer &lt;span class=&quot;mut&quot;&gt;&amp;ndash;&lt;/span&gt;'><td>Seasonal Teller</td><td class='mono'>tmp.seasonal</td><td><span class="badge bad">Disabled</span></td><td data-s=''><span class="mut">&ndash;</span></td><td data-s="2026-06-16">2026-06-16</td><td data-s="96"><span class="days">96 days</span></td><td data-s="2026-06-16">2026-06-16</td><td class='mono'>OU=Branches,DC=examplebank,DC=local</td><td>Seasonal help - summer</td></tr>
+</table>
+</section>
+<section class="view" id="view-cl-users">
+<h1>Stale users &ndash; no logon in 30+ days</h1>
+<div class='sub'>1 enabled user accounts (out of 23 users in the domain) have not logged on in 30 days. Accounts that never logged on appear once they are older than the same threshold, so new hires are not flagged. Last logon comes from lastLogonTimestamp, which replicates with up to a 14-day lag &ndash; treat the day count as approximate.</div>
+<div class="tblbar"><input class="tblq" type="search" data-target="#tbl-users" data-count="cnt-users" placeholder="Filter by name, account, OU or description...">
+<span class='sub'><b id='cnt-users'>1</b> shown</span></div>
+<table class="tbl" id="tbl-users"><tr><th>Name</th><th>Account</th><th>Privileged</th><th>Last logon</th><th>Idle</th><th>Password last set</th><th>Created</th><th>OU</th></tr>
+<tr class='row' data-k='Project Account proj.unused OU=Staff,DC=examplebank,DC=local Created for core upgrade, never used &lt;span class=&quot;mut&quot;&gt;&amp;ndash;&lt;/span&gt;'><td>Project Account</td><td class='mono'>proj.unused</td><td data-s=''><span class="mut">&ndash;</span></td><td data-s="1000-01-01"><span class="badge bad">never</span></td><td data-s="365"><span class="days"><span class="badge warn">365 days</span></span></td><td data-s="1000-01-01"><span class="badge bad">never</span></td><td data-s="2025-09-20">2025-09-20</td><td class='mono'>OU=Staff,DC=examplebank,DC=local</td></tr>
+</table>
+</section>
+<section class="view" id="view-cl-computers">
+<h1>Stale computers &ndash; no check-in in 60+ days</h1>
+<div class='sub'>2 of 14 computer accounts have not checked in for 60 days. A healthy domain member resets its machine password every 30 days, so a stale password date is the stronger signal that the object is abandoned.</div>
+<div class="tblbar"><input class="tblq" type="search" data-target="#tbl-computers" data-count="cnt-computers" placeholder="Filter by name, OS, OU or description...">
+<span class='sub'><b id='cnt-computers'>2</b> shown</span></div>
+<table class="tbl" id="tbl-computers"><tr><th>Computer</th><th>Operating system</th><th>Last check-in</th><th>Idle</th><th>Machine password set</th><th>State</th><th>OU</th></tr>
+<tr class='row' data-k='SRV-LEGACY01 Windows Server 2012 R2 OU=Servers,DC=examplebank,DC=local Decommissioned with legacy core'><td>SRV-LEGACY01</td><td>Windows Server 2012 R2</td><td data-s="2024-12-19">2024-12-19</td><td data-s="640"><span class="days"><span class="badge bad">640 days</span></span></td><td data-s="2024-12-19">2024-12-19</td><td><span class="badge bad">Disabled</span></td><td class='mono'>OU=Servers,DC=examplebank,DC=local</td></tr>
+<tr class='row' data-k='WS-OPS-07 Windows 10 Pro OU=Workstations,DC=examplebank,DC=local Pending replacement'><td>WS-OPS-07</td><td>Windows 10 Pro</td><td data-s="2025-08-04">2025-08-04</td><td data-s="412"><span class="days"><span class="badge bad">412 days</span></span></td><td data-s="2025-08-04">2025-08-04</td><td><span class="badge bad">Disabled</span></td><td class='mono'>OU=Workstations,DC=examplebank,DC=local</td></tr>
+</table>
+</section>
+<footer><a href='https://audithat.com' target='_blank' rel='noopener'>AuditHat</a> &middot; Export-ADAuditReport.ps1 v3.6.0 &middot; 2026-09-20 20:22:16 &middot; 5 GPOs &middot; 33 settings</footer>
+</main></div>
+<script>function norm(s){return (s||'').toLowerCase();}
+function show(v){
+  document.querySelectorAll('nav.side a.nav').forEach(function(a){ a.classList.toggle('on', a.dataset.view === v); });
+  document.querySelectorAll('section.view').forEach(function(s){ s.classList.toggle('on', s.id === 'view-' + v); });
+  window.scrollTo(0, 0);
+}
+function gotoGpo(anchor){
+  document.getElementById('q').value = '';
+  document.getElementById('fLink').value = 'all';
+  document.getElementById('fSet').checked = false;
+  applyFilter();
+  show('gpos');
+  var el = document.getElementById(anchor);
+  if (el) { el.open = true; el.scrollIntoView({block:'start'}); }
+  return false;
+}
+function applyFilter(){
+  var term = norm(document.getElementById('q').value).trim();
+  var onlySet = document.getElementById('fSet').checked;
+  var linkMode = document.getElementById('fLink').value;
+  var shown = 0;
+  document.querySelectorAll('details.gpo').forEach(function(g){
+    var nameHit = (term === '') || norm(g.dataset.name).indexOf(term) >= 0;
+    var total = 0;
+    g.querySelectorAll('details.cont').forEach(function(c){
+      var contHit = nameHit || norm(c.dataset.k).indexOf(term) >= 0;
+      var vis = 0;
+      c.querySelectorAll('tr.setting').forEach(function(r){
+        var hit = contHit || norm(r.dataset.k).indexOf(term) >= 0;
+        r.style.display = hit ? '' : 'none';
+        if (hit) vis++;
+      });
+      c.style.display = vis > 0 ? '' : 'none';
+      if (term && vis > 0) c.open = true;
+      total += vis;
+    });
+    g.querySelectorAll('details.side').forEach(function(s){
+      var any = 0;
+      s.querySelectorAll('details.cont').forEach(function(c){ if (c.style.display !== 'none') any++; });
+      s.style.display = any > 0 ? '' : 'none';
+      if (term && any > 0) s.open = true;
+    });
+    var ok = (term === '') ? true : (nameHit || total > 0);
+    if (onlySet && g.dataset.settings === '0') ok = false;
+    if (linkMode === 'linked' && g.dataset.linked !== '1') ok = false;
+    if (linkMode === 'unlinked' && g.dataset.linked === '1') ok = false;
+    g.style.display = ok ? '' : 'none';
+    if (ok) shown++;
+    if (term && ok && total > 0) g.open = true;
+  });
+  document.getElementById('shown').textContent = shown;
+}
+function applyFocusFilter(){
+  var inc = document.getElementById('fApply').checked;
+  document.querySelectorAll('.area').forEach(function(a){
+    var shown = 0, hidden = 0;
+    a.querySelectorAll('details.grow').forEach(function(d){
+      var ok = inc || d.dataset.applying === '1';
+      d.style.display = ok ? '' : 'none';
+      if (ok) { shown++; } else { hidden++; d.open = false; }
+    });
+    var badge = a.querySelector('.cnt');
+    if (badge) {
+      badge.textContent = shown > 0 ? (shown + ' GPO(s)') : 'Nothing applying';
+      badge.className = shown > 0 ? 'badge ok cnt' : 'badge bad cnt';
+    }
+    var none = a.querySelector('.noneMsg');
+    if (none) {
+      if (shown > 0) { none.style.display = 'none'; }
+      else {
+        none.style.display = '';
+        none.textContent = hidden > 0
+          ? (hidden + ' GPO(s) configure this area but none of them are applying (unlinked, link disabled, or settings disabled). Tick "Include GPOs that are not applying" above to see them.')
+          : 'No GPO in this domain configures anything in this area.';
+      }
+    }
+  });
+}
+function applyLogonFilter(){
+  var q = document.getElementById('qLogon');
+  if (!q) return;
+  var term = norm(q.value).trim();
+  var mode = document.getElementById('fLogon').value;
+  var incDisabled = document.getElementById('fLogonDis').checked;
+  var n = 0;
+  document.querySelectorAll('#tbl-logon .lhuser').forEach(function(u){
+    var ok = (term === '') || norm(u.dataset.k).indexOf(term) >= 0;
+    if (ok && !incDisabled && u.dataset.enabled === '0') ok = false;
+    if (ok) {
+      if (mode === 'hours' && u.dataset.hours !== '1') ok = false;
+      if (mode === 'never' && u.dataset.never !== '1') ok = false;
+      if (mode === 'ws'    && u.dataset.ws    !== '1') ok = false;
+      if (mode === 'exp'   && u.dataset.exp   !== '1') ok = false;
+    }
+    u.style.display = ok ? '' : 'none';
+    if (ok) n++;
+  });
+  document.getElementById('cnt-logon').textContent = n;
+}
+function copyFallback(text, done){
+  var ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); done(); } catch (e) { }
+  document.body.removeChild(ta);
+}
+function copyFrom(id, btn){
+  var el = document.getElementById(id);
+  if (!el) return;
+  var text = el.textContent;
+  var done = function(){
+    var old = btn.textContent;
+    btn.textContent = 'Copied';
+    setTimeout(function(){ btn.textContent = old; }, 1400);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done, function(){ copyFallback(text, done); });
+  } else {
+    copyFallback(text, done);
+  }
+}
+/* ---- click-to-sort on any table with a header row ---- */
+function sortKey(td){
+  if (!td) return '';
+  if (td.dataset && td.dataset.s !== undefined) return td.dataset.s;
+  return (td.textContent || '').trim();
+}
+function cmpVals(a, b){
+  var isoA = /^\d{4}-\d{2}-\d{2}/.test(a), isoB = /^\d{4}-\d{2}-\d{2}/.test(b);
+  if (isoA && isoB) {
+    var ta = Date.parse(a), tb = Date.parse(b);
+    if (!isNaN(ta) && !isNaN(tb)) return ta - tb;
+    return a.localeCompare(b);
+  }
+  if (isoA !== isoB) return isoA ? -1 : 1;
+  var na = parseFloat(a), nb = parseFloat(b);
+  var numA = /^-?[\d.]/.test(a) && !isNaN(na);
+  var numB = /^-?[\d.]/.test(b) && !isNaN(nb);
+  if (numA && numB) return na - nb;
+  if (numA !== numB) return numA ? -1 : 1;
+  return a.toLowerCase().localeCompare(b.toLowerCase());
+}
+function makeSortable(table){
+  var head = table.querySelector('tr');
+  if (!head) return;
+  var cells = [].slice.call(head.children);
+  if (!cells.length || cells[0].tagName !== 'TH') return;
+  cells.forEach(function(th, idx){
+    th.classList.add('sortable');
+    th.addEventListener('click', function(){
+      var asc = (th.dataset.dir !== 'asc');
+      cells.forEach(function(h){ h.removeAttribute('data-dir'); });
+      th.dataset.dir = asc ? 'asc' : 'desc';
+      var body = table.tBodies[0];
+      if (!body) return;
+      var rows = [].slice.call(body.rows).filter(function(r){ return r !== head; });
+      rows.sort(function(r1, r2){
+        return (asc ? 1 : -1) * cmpVals(sortKey(r1.cells[idx]), sortKey(r2.cells[idx]));
+      });
+      rows.forEach(function(r){ body.appendChild(r); });
+    });
+  });
+}
+function setAll(open){ document.querySelectorAll('#view-gpos details').forEach(function(d){ d.open = open; }); }
+document.addEventListener('DOMContentLoaded', function(){
+  document.querySelectorAll('nav.side a.nav').forEach(function(a){
+    a.addEventListener('click', function(e){ e.preventDefault(); show(a.dataset.view); });
+  });
+  document.getElementById('q').addEventListener('input', applyFilter);
+  document.getElementById('fSet').addEventListener('change', applyFilter);
+  document.getElementById('fLink').addEventListener('change', applyFilter);
+  document.getElementById('fApply').addEventListener('change', applyFocusFilter);
+  if (document.getElementById('qLogon')) {
+    document.getElementById('qLogon').addEventListener('input', applyLogonFilter);
+    document.getElementById('fLogon').addEventListener('change', applyLogonFilter);
+    document.getElementById('fLogonDis').addEventListener('change', applyLogonFilter);
+    applyLogonFilter();
+  }
+  document.querySelectorAll('input.tblq').forEach(function(inp){
+    inp.addEventListener('input', function(){
+      var t = document.querySelector(inp.dataset.target);
+      if (!t) return;
+      var term = norm(inp.value).trim();
+      var n = 0;
+      t.querySelectorAll('.row').forEach(function(r){
+        var ok = (term === '') || norm(r.dataset.k).indexOf(term) >= 0;
+        r.style.display = ok ? '' : 'none';
+        if (ok) n++;
+      });
+      var c = document.getElementById(inp.dataset.count);
+      if (c) c.textContent = n;
+    });
+  });
+  document.getElementById('bExpand').addEventListener('click', function(){ setAll(true); });
+  document.getElementById('bCollapse').addEventListener('click', function(){ setAll(false); });
+  document.querySelectorAll('table.tbl, .grp table, .appendix table, table.psotbl').forEach(makeSortable);
+  applyFilter();
+  applyFocusFilter();
+  show('focus');
+});</script></body></html>

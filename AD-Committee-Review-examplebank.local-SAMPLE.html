@@ -1,0 +1,185 @@
+﻿<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AD Committee Review - examplebank.local</title>
+<style>:root{--ink:#111;--mut:#555;--line:#d4d9df;--accent:#0b5fff;--hi:#b91c1c;--med:#b45309;--low:#3f6212;--ok:#15803d;--chip:#f1f4f8}
+*{box-sizing:border-box}
+body{margin:0;background:#fff;color:var(--ink);font:13.5px/1.55 "Segoe UI",system-ui,-apple-system,sans-serif}
+.page{max-width:980px;margin:0 auto;padding:36px 44px 60px}
+h1{font-size:23px;margin:0 0 2px}
+h2{font-size:15px;margin:30px 0 10px;padding-bottom:5px;border-bottom:2px solid var(--ink);text-transform:uppercase;letter-spacing:.05em}
+h3{font-size:13.5px;margin:18px 0 6px}
+.sub{color:var(--mut);font-size:12.5px}
+table{width:100%;border-collapse:collapse;font-size:12.5px;margin:8px 0 4px}
+th{text-align:left;padding:7px 9px;background:var(--chip);border:1px solid var(--line);font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#333}
+td{padding:7px 9px;border:1px solid var(--line);vertical-align:top}
+.cover{border:2px solid var(--ink);padding:18px 22px;margin-bottom:6px}
+.brandbar{display:flex;align-items:baseline;gap:10px;margin:0 0 12px;padding-bottom:9px;border-bottom:1px solid var(--line)}
+.brandbar a{font-size:15px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;text-decoration:none;color:var(--accent)}
+.brandbar span{font-size:11px;color:var(--mut)}
+.cover .row{display:flex;flex-wrap:wrap;gap:26px;margin-top:12px}
+.cover .f{min-width:180px}
+.cover .f b{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut)}
+.tiles{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}
+.tile{border:1px solid var(--line);border-radius:5px;padding:9px 13px;min-width:112px}
+.tile b{display:block;font-size:19px;line-height:1.2}
+.tile span{font-size:11px;color:var(--mut)}
+.sev{display:inline-block;padding:2px 7px;border-radius:3px;font-size:10.5px;font-weight:700;letter-spacing:.03em;color:#fff}
+.sev.High{background:var(--hi)} .sev.Medium{background:var(--med)} .sev.Low{background:var(--low)}
+.st{font-weight:700} .st.ok{color:var(--ok)} .st.no{color:var(--hi)}
+ul.sum{margin:6px 0 0;padding-left:20px} ul.sum li{margin:5px 0}
+.chg{margin:0;padding-left:20px} .chg li{margin:5px 0}
+.chg .Better::marker{color:var(--ok)} .chg .Worse::marker{color:var(--hi)}
+.tag{font-weight:700;font-size:11px;letter-spacing:.03em}
+.tag.Better{color:var(--ok)} .tag.Worse{color:var(--hi)} .tag.Neutral{color:var(--mut)}
+.mono{font-family:Consolas,"Courier New",monospace;font-size:11.5px}
+.same{color:var(--ok);font-weight:600}
+.diff{color:var(--hi);font-weight:700}
+.was{color:var(--mut)}
+.now{font-weight:600}
+.chg-Added{color:var(--hi);font-weight:700}
+.chg-Removed{color:var(--ok);font-weight:700}
+.chg-Modified{color:var(--med);font-weight:700}
+.set-Added{color:var(--ok);font-weight:700}
+.set-Removed{color:var(--hi);font-weight:700}
+.set-Modified{color:var(--med);font-weight:700}
+.same-note{background:#f2f9f4;border-left:3px solid var(--ok);padding:9px 12px;font-size:12px;color:#22402c;margin:8px 0}
+.signoff{margin-top:14px;border:1px solid var(--line)}
+.signoff td{height:46px}
+.note{background:var(--chip);border-left:3px solid var(--accent);padding:9px 12px;font-size:12px;color:#333;margin:10px 0}
+footer{margin-top:34px;padding-top:10px;border-top:1px solid var(--line);color:var(--mut);font-size:11px}
+a{color:var(--accent)}
+@media print{
+  body{font-size:11pt}
+  .page{max-width:none;padding:0}
+  h2{page-break-after:avoid}
+  table,.cover,.signoff{page-break-inside:avoid}
+  .noprint{display:none}
+}</style></head><body>
+<div style="position:relative;z-index:9999;background:#7c2d12;color:#fff;font:600 13px/1.4 'Segoe UI',system-ui,sans-serif;padding:10px 16px;text-align:center;border-bottom:2px solid #431407">
+SAMPLE REPORT &mdash; every domain, account, computer and finding below is FICTIONAL.
+Generated against an invented &ldquo;Example Bank&rdquo; lab domain to show the report format.
+No real directory data appears here. &nbsp;<a href="https://audithat.com" style="color:#fed7aa">audithat.com</a>
+</div>
+<div class='page'>
+<div class="cover">
+<div class='brandbar'><a href='https://audithat.com' target='_blank' rel='noopener'>AuditHat</a><span>Baseline and drift reporting for financial institutions</span></div>
+<h1>Active Directory &amp; Group Policy Review</h1>
+<div class="sub">Prepared for IT Committee / IT Steering Committee review</div>
+<div class="row">
+<div class='f'><b>Domain</b>examplebank.local</div>
+<div class='f'><b>Review date</b>September 20, 2026</div>
+<div class='f'><b>Prepared by</b>EXAMPLEBANK\adm.tokafor</div>
+<div class='f'><b>Collected from</b>DC01</div>
+<div class='f'><b>Period covered</b>August 16, 2026 to September 20, 2026 (35 days)</div>
+<div class='f'><b>Source</b>Export-ADAuditReport.ps1 v3.6.0</div>
+</div></div>
+<h2>Executive summary</h2>
+<div class="tiles">
+<div class='tile'><b>5</b><span>Group Policy Objects</span></div>
+<div class='tile'><b>33</b><span>Configured settings</span></div>
+<div class='tile'><b style='color:var(--hi)'>1</b><span>High findings</span></div>
+<div class='tile'><b style='color:var(--med)'>3</b><span>Medium findings</span></div>
+<div class='tile'><b style='color:var(--low)'>2</b><span>Low findings</span></div>
+</div>
+<ul class="sum">
+<li>6 of 6 reviewed control areas are configured by a Group Policy Object that is actively applying.</li>
+<li>Privileged group membership totals 10 account(s) across Administrators, Domain Admins, Enterprise Admins and Schema Admins.</li>
+<li>Directory hygiene: 5 disabled account(s), 1 enabled account(s) unused for 30+ days, 2 computer(s) not checked in for 60+ days.</li>
+<li>7 user account(s) carry a logon-hour, workstation or account-expiry restriction.</li>
+<li><b>4 item(s) require management attention</b>, detailed under Open Items below.</li>
+</ul>
+<h2>Change over the last 35 days</h2>
+<div class='sub'>Review window: <b>at least 30 days</b>. Compared against the recorded state of <b>August 16, 2026</b>, 35 day(s) ago &ndash; the most recent baseline that is at least 30 days old. Every item below either changed inside that window, or is confirmed unchanged.</div>
+<div class="tiles">
+<div class='tile'><b>16</b><span>Total changes</span></div>
+<div class='tile'><b>2</b><span>Control areas changed</span></div>
+<div class='tile'><b>3</b><span>Setting changes</span></div>
+<div class='tile'><b style='color:var(--hi)'>3</b><span>Privileged changes</span></div>
+<div class='tile'><b>7</b><span>User changes</span></div>
+<div class='tile'><b>3</b><span>Computer changes</span></div>
+</div>
+<h3>Headlines</h3>
+<ul class="chg">
+<li class='Worse'><span class='tag Worse'>WORSE</span> &nbsp;Microsoft Entra Password Protection: mode changed from Enforced to Audit only - nothing is blocked</li>
+<li class='Worse'><span class='tag Worse'>WORSE</span> &nbsp;Administrators (built-in): added adm.contractor</li>
+<li class='Worse'><span class='tag Worse'>WORSE</span> &nbsp;Domain Admins: added adm.contractor</li>
+<li class='Worse'><span class='tag Worse'>WORSE</span> &nbsp;Disabled accounts: 3 -&gt; 5</li>
+<li class='Better'><span class='tag Better'>BETTER</span> &nbsp;Domain Admins: removed adm.rvance</li>
+<li class='Better'><span class='tag Better'>BETTER</span> &nbsp;Stale users: 2 -&gt; 1</li>
+<li class='Better'><span class='tag Better'>BETTER</span> &nbsp;Stale computers: 3 -&gt; 2</li>
+</ul>
+<h3>1. Control areas &mdash; changed or unchanged</h3>
+<table><tr><th style='width:27%'>Control area</th><th style='width:24%'>As of Aug 16, 2026</th><th style='width:24%'>Today</th><th style='width:25%'>Result</th></tr>
+<tr><td><b>A.</b> Password policy - users and administrators</td><td>Configured - 6 setting(s)</td><td>Configured - 6 setting(s)</td><td class='diff'>2 setting(s) changed</td></tr>
+<tr><td><b>B.</b> Account lockout</td><td>Configured - 3 setting(s)</td><td>Configured - 3 setting(s)</td><td class='same'>No change</td></tr>
+<tr><td><b>C.</b> Audit policy and event logs</td><td>Configured - 6 setting(s)</td><td>Configured - 6 setting(s)</td><td class='same'>No change</td></tr>
+<tr><td><b>D.</b> Inactivity - screen lock and idle sessions</td><td>Configured - 5 setting(s)</td><td>Configured - 5 setting(s)</td><td class='diff'>1 setting(s) changed</td></tr>
+<tr><td><b>E.</b> USB and removable storage restrictions</td><td>Configured - 5 setting(s)</td><td>Configured - 5 setting(s)</td><td class='same'>No change</td></tr>
+<tr><td><b>F.</b> Logon banner - legal notice</td><td>Configured - 2 setting(s)</td><td>Configured - 2 setting(s)</td><td class='same'>No change</td></tr>
+</table>
+<div class='sub'>2 of 6 control areas changed in this window; <b>4 are unchanged</b>.</div>
+<h3>2. Group Policy setting changes</h3>
+<table><tr><th style="width:13%">Area</th><th style="width:22%">Setting</th><th style="width:10%">Change</th><th style="width:20%">Was</th><th style="width:20%">Now</th><th style="width:15%">GPO</th></tr>
+<tr><td>A. Password policy</td><td>MinimumPasswordLength</td><td class='set-Modified'>Modified</td><td class='was'>14 characters</td><td class='now'>12 characters</td><td class='sub'>Default Domain Policy</td></tr>
+<tr><td>A. Password policy</td><td>Password restriction product: Microsoft Entra Password Protection</td><td class='set-Modified'>Modified</td><td class='was'>Enforced</td><td class='now'>Audit only - nothing is blocked</td><td class='sub'>Enforcement mode changed</td></tr>
+<tr><td>D. Inactivity</td><td>Interactive logon: Machine inactivity limit</td><td class='set-Modified'>Modified</td><td class='was'>900</td><td class='now'>1800</td><td class='sub'>EXB - Workstation Security Baseline</td></tr>
+</table>
+<h3>3. Privileged group membership changes</h3>
+<table><tr><th style="width:28%">Group</th><th style="width:24%">Account</th><th style="width:20%">Change</th><th style="width:14%">Was</th><th style="width:14%">Now</th></tr>
+<tr><td>Administrators (built-in)</td><td class='mono'>adm.contractor</td><td class='chg-Added'>Added to group</td><td class='was'>Not a member</td><td class='now'>Member</td></tr>
+<tr><td>Domain Admins</td><td class='mono'>adm.contractor</td><td class='chg-Added'>Added to group</td><td class='was'>Not a member</td><td class='now'>Member</td></tr>
+<tr><td>Domain Admins</td><td class='mono'>adm.rvance</td><td class='chg-Removed'>Removed from group</td><td class='was'>Member</td><td class='now'>Not a member</td></tr>
+</table>
+<div class="sub">Every addition to a privileged group should have an approved change record behind it.</div>
+<h3>4. User account changes</h3>
+<table><tr><th style="width:17%">Account</th><th style="width:19%">Name</th><th style="width:22%">Change</th><th style="width:21%">Was</th><th style="width:21%">Now</th></tr>
+<tr><td class='mono'>adm.contractor</td><td>Contract Admin</td><td class='chg-Added'>Account created</td><td class='was'>(did not exist)</td><td class='now'>Enabled</td></tr>
+<tr><td class='mono'>adm.rvance</td><td>Robin Vance (admin)</td><td class='chg-Removed'>Disabled</td><td class='was'>Enabled</td><td class='now'>Disabled</td></tr>
+<tr><td class='mono'>mblaise</td><td>Morgan Blaise</td><td class='chg-Modified'>Password never expires</td><td class='was'>No</td><td class='now'>Yes</td></tr>
+<tr><td class='mono'>nhaddad</td><td>Noor Haddad</td><td class='chg-Added'>Account created</td><td class='was'>(did not exist)</td><td class='now'>Enabled</td></tr>
+<tr><td class='mono'>praman</td><td>Priya Raman</td><td class='chg-Modified'>Moved</td><td class='was'>OU=Staff,DC=examplebank,DC=local</td><td class='now'>OU=Admin Accounts,DC=examplebank,DC=local</td></tr>
+<tr><td class='mono'>tmp.seasonal</td><td>Seasonal Teller</td><td class='chg-Removed'>Disabled</td><td class='was'>Enabled</td><td class='now'>Disabled</td></tr>
+<tr><td class='mono'>kiosk.lobby</td><td>Lobby Kiosk</td><td class='chg-Removed'>Account deleted</td><td class='was'>Enabled</td><td class='now'>(no longer present)</td></tr>
+</table>
+<h3>5. Computer account changes</h3>
+<table><tr><th style="width:22%">Computer</th><th style="width:22%">Change</th><th style="width:19%">Was</th><th style="width:19%">Now</th><th style="width:18%">Organizational unit</th></tr>
+<tr><td class='mono'>TLR-MAIN-04</td><td class='chg-Added'>Joined the domain</td><td class='was'>(did not exist)</td><td class='now'>Enabled</td><td class='sub'>OU=Branches,DC=examplebank,DC=local</td></tr>
+<tr><td class='mono'>WS-OPS-07</td><td class='chg-Removed'>Disabled</td><td class='was'>Enabled</td><td class='now'>Disabled</td><td class='sub'>OU=Workstations,DC=examplebank,DC=local</td></tr>
+<tr><td class='mono'>WS-STAGED-11</td><td class='chg-Removed'>Removed from the domain</td><td class='was'>Enabled</td><td class='now'>(no longer present)</td><td class='sub'>OU=Workstations,DC=examplebank,DC=local</td></tr>
+</table>
+<h2>Control review and mapping</h2>
+<table><tr><th style="width:22%">Control area</th><th style="width:9%">Status</th><th style="width:27%">Configured by</th><th style="width:42%">Reference</th></tr>
+<tr><td><b>A.</b> Password policy - users and administrators</td><td><span class="st ok">Configured</span></td><td>Default Domain Policy</td><td>FFIEC IS II.C.7 User Security Controls; II.C.15 Logical Security<br>NIST CSF 2.0 PR.AA<br>CRI Profile PR.AA<br>CIS Controls v8 5.2, 6.3</td></tr>
+<tr><td><b>B.</b> Account lockout</td><td><span class="st ok">Configured</span></td><td>Default Domain Policy</td><td>FFIEC IS II.C.7 User Security Controls<br>NIST CSF 2.0 PR.AA<br>CRI Profile PR.AA<br>CIS Controls v8 6.3; CIS Benchmark - Account Lockout Policy</td></tr>
+<tr><td><b>C.</b> Audit policy and event logs</td><td><span class="st ok">Configured</span></td><td>EXB - Server Hardening Baseline</td><td>FFIEC IS II.C Risk Mitigation (logging and monitoring); Audit booklet<br>NIST CSF 2.0 DE.CM, PR.PS<br>CRI Profile DE.CM, PR.PS<br>CIS Controls v8 8.2, 8.5, 8.11</td></tr>
+<tr><td><b>D.</b> Inactivity - screen lock and idle sessions</td><td><span class="st ok">Configured</span></td><td>EXB - Teller Workstation Lockdown; EXB - Workstation Security Baseline</td><td>FFIEC IS II.C.7 User Security Controls; II.C.15 Logical Security<br>NIST CSF 2.0 PR.AA<br>CRI Profile PR.AA, PR.PS<br>CIS Controls v8 4.3</td></tr>
+<tr><td><b>E.</b> USB and removable storage restrictions</td><td><span class="st ok">Configured</span></td><td>EXB - Teller Workstation Lockdown; EXB - Workstation Security Baseline</td><td>FFIEC IS II.C.13 Control of Information<br>NIST CSF 2.0 PR.DS, PR.PS<br>CRI Profile PR.DS, PR.PS<br>CIS Controls v8 3.6, 10.3</td></tr>
+<tr><td><b>F.</b> Logon banner - legal notice</td><td><span class="st ok">Configured</span></td><td>EXB - Workstation Security Baseline</td><td>FFIEC IS II.C.15 Logical Security<br>NIST CSF 2.0 PR.AT, GV.PO<br>CRI Profile PR.AT, PR.PS<br>CIS Controls v8 4.1; CIS Benchmark - Interactive logon message</td></tr>
+<tr><td><b>G.</b> Privileged group membership</td><td><span class="st ok">Reviewed</span></td><td>Administrators, Domain Admins, Enterprise Admins, Schema Admins</td><td>FFIEC IS II.C.7 User Security Controls (least privilege, access rights administration)<br>NIST CSF 2.0 PR.AA<br>CRI Profile PR.AA<br>CIS Controls v8 5.4, 6.8</td></tr>
+<tr><td><b>H.</b> Account provisioning and dormancy</td><td><span class="st ok">Reviewed</span></td><td>Thresholds: users 30 days, computers 60 days</td><td>FFIEC IS II.C.7 User Security Controls (provisioning and deprovisioning)<br>NIST CSF 2.0 PR.AA, ID.AM<br>CRI Profile PR.AA, ID.AM<br>CIS Controls v8 5.1, 5.3</td></tr>
+<tr><td><b>I.</b> User logon restrictions</td><td><span class="st ok">Reviewed</span></td><td>logonHours, logonWorkstations, account expiry</td><td>FFIEC IS II.C.7 User Security Controls; II.C.15 Logical Security<br>NIST CSF 2.0 PR.AA<br>CRI Profile PR.AA<br>CIS Controls v8 6.1, 6.2</td></tr>
+<tr><td><b>J.</b> Password content restrictions<br><span class='sub'>banned words, dictionary, breached passwords</span></td><td><span class="st no">Audit only</span></td><td>Microsoft Entra Password Protection (Audit only - nothing is blocked); PassFiltEx (open source)</td><td>FFIEC IS II.C.7 User Security Controls (authentication strength)<br>NIST CSF 2.0 PR.AA<br>CRI Profile PR.AA<br>CIS Controls v8 5.2</td></tr>
+</table>
+<div class="note"><b>On the references:</b> FFIEC citations are to the current IT Examination Handbook booklets. NIST CSF 2.0 gives the Function and Category. CRI Profile references are to the Cyber Risk Institute Profile v2.x at the <i>Category</i> level; the Profile identifies individual requirements as diagnostic statements in the form <span class="mono">FUNCTION.CATEGORY-##.##</span>, so if your institution reports against specific diagnostic statements, add those numbers from your licensed Profile workbook. CIS Controls v8 safeguards are included for institutions whose hardening standard is the Center for Internet Security Benchmarks. These are the default mappings shipped with the script and are a starting point &ndash; confirm them against your institution&rsquo;s own control set and your examiner&rsquo;s expectations. They are defined in one place at the top of the script ($script:ControlMap) and can be edited to match your house citations. Framework names are used for mapping and identification only; no endorsement, certification or affiliation is implied.</div>
+<h2>Open items</h2>
+<table><tr><th style="width:8%">Severity</th><th style="width:30%">Finding</th><th style="width:38%">Detail</th><th style="width:24%">Reference</th></tr>
+<tr><td><span class='sev High'>High</span></td><td>Entra Password Protection is running in audit-only mode</td><td>The DC agent reports AuditOnly. Banned and weak passwords are logged but still accepted, so the control is not actually enforcing. Switch the tenant policy to Enforced.</td><td class='sub'>FFIEC IS II.C.7 User Security Controls (authentication strength)<br>NIST CSF 2.0 PR.AA<br>CRI Profile PR.AA<br>CIS Controls v8 5.2</td></tr>
+<tr><td><span class='sev Medium'>Medium</span></td><td>1 enabled user account(s) unused for 30+ days</td><td>Dormant enabled accounts expand the attack surface and should be reviewed for disablement.</td><td class='sub'>FFIEC IS II.C.7 User Security Controls (provisioning and deprovisioning)<br>NIST CSF 2.0 PR.AA, ID.AM<br>CRI Profile PR.AA, ID.AM<br>CIS Controls v8 5.1, 5.3</td></tr>
+<tr><td><span class='sev Medium'>Medium</span></td><td>Administrators (built-in): 1 member(s) with non-expiring passwords</td><td>svc.backup</td><td class='sub'>FFIEC IS II.C.7 User Security Controls (least privilege, access rights administration)<br>NIST CSF 2.0 PR.AA<br>CRI Profile PR.AA<br>CIS Controls v8 5.4, 6.8</td></tr>
+<tr><td><span class='sev Medium'>Medium</span></td><td>Domain Admins: 1 member(s) with non-expiring passwords</td><td>svc.backup</td><td class='sub'>FFIEC IS II.C.7 User Security Controls (least privilege, access rights administration)<br>NIST CSF 2.0 PR.AA<br>CRI Profile PR.AA<br>CIS Controls v8 5.4, 6.8</td></tr>
+<tr><td><span class='sev Low'>Low</span></td><td>1 Group Policy Object(s) are not linked anywhere</td><td>Unlinked GPOs apply to nothing. Confirm they are intentional and remove those that are obsolete.</td><td class='sub'>FFIEC IS II.C.2 Technology Design; Architecture, Infrastructure and Operations booklet<br>NIST CSF 2.0 PR.PS<br>CRI Profile PR.PS<br>CIS Controls v8 4.1, 4.2</td></tr>
+<tr><td><span class='sev Low'>Low</span></td><td>2 computer account(s) have not checked in for 60+ days</td><td>Stale computer objects should be verified and removed as part of routine directory hygiene.</td><td class='sub'>FFIEC IS II.C.7 User Security Controls (provisioning and deprovisioning)<br>NIST CSF 2.0 PR.AA, ID.AM<br>CRI Profile PR.AA, ID.AM<br>CIS Controls v8 5.1, 5.3</td></tr>
+</table>
+<h2>Committee review and sign-off</h2>
+<table class="signoff">
+<tr><th style="width:26%">Reviewed by</th><th style="width:26%">Title</th><th style="width:24%">Signature</th><th style="width:24%">Date</th></tr>
+<tr><td></td><td></td><td></td><td></td></tr>
+<tr><td></td><td></td><td></td><td></td></tr>
+<tr><td></td><td></td><td></td><td></td></tr>
+</table>
+<table class="signoff"><tr><th style="width:50%">Committee meeting date</th><th style="width:50%">Minute / agenda reference</th></tr><tr><td></td><td></td></tr></table>
+<footer>
+Produced with AuditHat (https://audithat.com) using Export-ADAuditReport.ps1 v3.6.0 on 2026-09-20 20:22:16. Directory data read via the ActiveDirectory module.
+<br>Supporting detail: <a class='noprint' href='AD-Report-examplebank.local-SAMPLE.html'>AD-Report-examplebank.local-SAMPLE.html</a><span style='display:none'>AD-Report-examplebank.local-SAMPLE.html</span>
+</footer>
+</div></body></html>
