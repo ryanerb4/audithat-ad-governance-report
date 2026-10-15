@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    AuditHat - Active Directory and Group Policy audit report.
+    AuditHat - Active Directory and Group Policy audit report. Version 3.15.0
     https://audithat.com
 
     Produces a detailed HTML review of every GPO in the domain, plus a separate
@@ -16,6 +16,8 @@
       GPO-Settings.csv / GPO-Scope.csv            <- every setting, every link
       Cleanup-*.csv                               <- disabled / stale accounts
       LogonRestrictions.csv                       <- per-user logon limits
+      ServiceAccounts.csv                         <- service accounts and their logon restriction
+      AllUsers.csv                                <- every user account, for the auditor
       Drift-Changes.csv                           <- every change in the drift window
       ad-snapshot.json                            <- state, for the next run's comparison
 
@@ -23,6 +25,9 @@
       Focus areas       - which GPOs configure each area auditors ask about
       Privileged groups - Administrators / Domain / Enterprise / Schema Admins
       Logon restrictions- per-user logon hours (7x24 grid), workstations, expiry
+      Service accounts  - what looks like a service account, and whether it is
+                          restricted from interactive logon
+      All users         - the complete user account inventory
       All GPOs          - the full nested inventory with search
       Scope index       - every link in the domain, by container
       Unlinked GPOs     - GPOs that are not applying anywhere
@@ -68,6 +73,10 @@
 .PARAMETER UtcOffsetHours
     UTC offset used to draw the logon-hour grids. logonHours is stored in UTC;
     the grids are drawn in local time. Default: this machine's current offset.
+
+.PARAMETER SkipServiceAccounts
+    Skip the service account review (which accounts look like service accounts,
+    and whether anything stops them logging on interactively).
 
 .PARAMETER SkipCommitteeReport
     Skip the separate committee review HTML (AD-Committee-Review-<domain>-YYYYMMDD.html).
@@ -127,6 +136,7 @@ param(
     [switch]   $SkipPerGpoHtml,
     [switch]   $SkipPrivilegedGroups,
     [switch]   $SkipCleanup,
+    [switch]   $SkipServiceAccounts,
     [switch]   $SkipCommitteeReport,
     [int]      $UtcOffsetHours = 9999,
     [int]      $StaleUserDays = 30,
@@ -196,7 +206,7 @@ $Branding = @{
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
 
-$script:ScriptVersion = '3.10.0'
+$script:ScriptVersion = '3.15.0'
 $script:ScriptName    = 'Export-ADAuditReport.ps1'
 
 # ---- resolve the branding block into what the rest of the script uses
@@ -299,6 +309,15 @@ function Write-Step { param([string]$Message) Write-Host "[*] $Message" -Foregro
 function Write-Warn { param([string]$Message) Write-Host "[!] $Message" -ForegroundColor Yellow }
 
 function HtmlEnc { param($Text) [System.Net.WebUtility]::HtmlEncode([string]$Text) }
+
+function Format-CsvField {
+    <# One CSV field: collapse whitespace, double the quotes, quote when needed. #>
+    param($Value)
+    $v = ([string]$Value) -replace '\s+', ' '
+    $v = $v.Trim()
+    if ($v -match '[",]') { return '"' + ($v -replace '"', '""') + '"' }
+    return $v
+}
 
 function Get-Elem {
     param($Node)
@@ -467,6 +486,7 @@ $script:ControlMap = @{
     'privileged' = 'FFIEC IS II.C.7 User Security Controls (least privilege, access rights administration) | NIST CSF 2.0 PR.AA | CRI Profile PR.AA | CIS Controls v8 5.4, 6.8'
     'stale'      = 'FFIEC IS II.C.7 User Security Controls (provisioning and deprovisioning) | NIST CSF 2.0 PR.AA, ID.AM | CRI Profile PR.AA, ID.AM | CIS Controls v8 5.1, 5.3'
     'logon'      = 'FFIEC IS II.C.7 User Security Controls; II.C.15 Logical Security | NIST CSF 2.0 PR.AA | CRI Profile PR.AA | CIS Controls v8 6.1, 6.2'
+    'service'    = 'FFIEC IS II.C.7 User Security Controls (authentication, least privilege) | NIST CSF 2.0 PR.AA | CRI Profile PR.AA | CIS Controls v8 5.1, 5.4'
     'gpo'        = 'FFIEC IS II.C.2 Technology Design; Architecture, Infrastructure and Operations booklet | NIST CSF 2.0 PR.PS | CRI Profile PR.PS | CIS Controls v8 4.1, 4.2'
 }
 
@@ -493,6 +513,8 @@ $script:Recommendations = @{
     'priv-pne'         = 'Review the administrative accounts. Remove "Password never expires" from interactive admin accounts. Move service accounts to group Managed Service Accounts (gMSA) where the application supports it; where it does not, document the exception and rotate the password on a defined schedule.'
     'stale-users'      = 'Review each account with the account owner or their manager. Disable accounts that are no longer needed and delete them after the retention period in the deprovisioning procedure.'
     'stale-computers'  = 'Confirm each computer has been retired or replaced, then disable and remove the account. Reconcile against the hardware asset inventory.'
+    'svc-interactive'  = 'Restrict these accounts, or convert them to managed service accounts. To restrict: put the service accounts in a security group and add that group to "Deny log on locally" and "Deny log on through Remote Desktop Services" in a GPO linked where they could otherwise sign in - leaving "Log on as a service" and "Log on as a batch job" in place, because services and scheduled tasks need those and removing them stops the application. To convert: a group Managed Service Account (gMSA) has its password owned by Active Directory, which generates it at 240 random characters and ROTATES IT AUTOMATICALLY every 30 days by default, releasing it only to the hosts you authorise. Nobody ever knows the password, it cannot be typed at a logon prompt, and it never needs manual rotation - which also removes the password-never-expires exception. The domain needs a KDS root key and the application must support gMSA (SQL Server, IIS application pools and scheduled tasks do; many third-party applications do not). Where neither is possible, document the exception and rotate the password on a defined schedule.'
+    'svc-nopolicy'     = 'Create a GPO that denies interactive logon to service and administrative accounts: add the relevant security groups to "Deny log on locally" and "Deny log on through Remote Desktop Services", linked to the workstation and server OUs. Without it the Windows defaults apply and any enabled account can sign in at a console wherever it has access.'
     'unlinked'         = 'Review each unlinked GPO. Delete those that are obsolete; for any kept deliberately, record why in the GPO description.'
 }
 
@@ -1086,13 +1108,14 @@ function Get-DirUsers {
         $adp = @{}
         if ($Server) { $adp['Server'] = $Server }
         $props = @('Enabled', 'LastLogonDate', 'PasswordLastSet', 'PasswordNeverExpires',
-                   'whenCreated', 'Description', 'logonHours', 'LogonWorkstations', 'AccountExpirationDate')
+                   'whenCreated', 'Description', 'logonHours', 'LogonWorkstations', 'AccountExpirationDate',
+                   'ServicePrincipalNames')
         $out = @(Get-ADUser -Filter * -Properties $props @adp)
     }
     elseif ($script:AdMode -eq 'LDAP') {
         $props = @('samaccountname', 'name', 'displayname', 'distinguishedname', 'useraccountcontrol',
                    'lastlogontimestamp', 'pwdlastset', 'accountexpires', 'whencreated', 'description',
-                   'logonhours', 'userworkstations')
+                   'logonhours', 'userworkstations', 'serviceprincipalname')
         $filter = '(&(objectCategory=person)(objectClass=user))'
         foreach ($r in (Invoke-LdapSearch -Root $script:LdapRoot -Filter $filter -Props $props)) {
 
@@ -1116,6 +1139,7 @@ function Get-DirUsers {
                 Description           = [string](Get-LdapVal $r 'description')
                 logonHours            = (Get-LdapVal $r 'logonhours')
                 LogonWorkstations     = [string](Get-LdapVal $r 'userworkstations')
+                ServicePrincipalNames = @(Get-LdapVals $r 'serviceprincipalname')
             }
         }
     }
@@ -1947,6 +1971,317 @@ if (-not $SkipCleanup -and $adAvailable) {
     catch { Write-Warn ("Cleanup scan failed: {0}" -f $_.Exception.Message) }
 }
 
+
+# ------------------------------------------------------- service accounts ---
+# There is no attribute in Active Directory that says "this is a service
+# account", so the report collects EVIDENCE and shows it, rather than asserting.
+# Edit these patterns to match your own naming standard.
+$script:ServiceAccountNamePatterns = @(
+    '^svc[._-]?', '[._-]svc$', '^sa[._-]', '^srv[._-]?', '^service[._-]?',
+    '[._-]service$', '^app[._-]', '^task[._-]', '^backup[._-]?', '^sql[._-]'
+)
+# Words in the description that suggest the account runs something
+$script:ServiceAccountDescPattern = 'service account|service acct|\bservice\b|scheduled task|application account|integration|api |daemon|unattended'
+
+# The two rights that stop an account being used to sign in at a console or
+# over RDP. Everything else (log on as a service, batch job) must stay.
+$script:DenyInteractiveRights = @{
+    'SeDenyInteractiveLogonRight'       = 'Deny log on locally'
+    'SeDenyRemoteInteractiveLogonRight' = 'Deny log on through Remote Desktop Services'
+}
+$script:AllowInteractiveRights = @{
+    'SeInteractiveLogonRight'       = 'Allow log on locally'
+    'SeRemoteInteractiveLogonRight' = 'Allow log on through Remote Desktop Services'
+}
+# Principals that effectively cover every account when named in a deny right
+$script:CatchAllPrincipals = @('everyone', 'authenticated users', 'domain users', 'users', 'all users')
+
+# group name -> recursive member sAMAccountNames, filled on demand
+$script:GroupMemberCache = @{}
+
+function Get-LdapVals {
+    <# Every value of a multi-valued attribute, as strings. #>
+    param($Result, [string]$Name)
+    $out = @()
+    try {
+        if ($Result.Properties.Contains($Name)) {
+            foreach ($v in $Result.Properties[$Name]) { $out += [string]$v }
+        }
+    }
+    catch { }
+    return $out
+}
+
+function Get-PrincipalLeaf {
+    <# "CONTOSO\Svc Accounts" / "BUILTIN\Users" / "CN=x,..." -> "svc accounts" #>
+    param([string]$Name)
+    $n = "$Name".Trim()
+    if (-not $n) { return '' }
+    if ($n -match '^CN=([^,]+)') { $n = $Matches[1] }
+    if ($n -match '\\') { $n = ($n -split '\\')[-1] }
+    return $n.Trim().ToLower()
+}
+
+function Get-PrivGroupsTextSafe {
+    <# Privileged groups this account is in, or '' - safe before PrivMap exists. #>
+    param([string]$SamLower)
+    try {
+        if ($script:PrivMap -and $script:PrivMap.ContainsKey($SamLower)) { return (@($script:PrivMap[$SamLower]) -join ', ') }
+    }
+    catch { }
+    return ''
+}
+
+function Get-InteractiveLogonRights {
+    <#
+      Every applying GPO that sets one of the interactive logon rights, with the
+      principals it names. Returns one row per GPO per right.
+    #>
+    param($Records)
+
+    $rows = @()
+    foreach ($r in @($Records)) {
+        foreach ($sx in (@($r.Computer) + @($r.User))) {
+            if ("$($sx.Container)" -notmatch 'User Rights Assignment') { continue }
+            $rightName = "$($sx.Name)".Trim()
+            $kind = ''
+            if ($script:DenyInteractiveRights.ContainsKey($rightName))       { $kind = 'Deny' }
+            elseif ($script:AllowInteractiveRights.ContainsKey($rightName))  { $kind = 'Allow' }
+            else { continue }
+
+            $label = if ($kind -eq 'Deny') { $script:DenyInteractiveRights[$rightName] } else { $script:AllowInteractiveRights[$rightName] }
+            $members = @()
+            if ("$($sx.Value)" -and "$($sx.Value)" -ne '(no members defined)') {
+                $members = @(("$($sx.Value)" -split ';') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+            }
+            $rows += [pscustomobject]@{
+                Gpo = $r.Gpo.DisplayName; Anchor = $r.Anchor; Applying = $r.Applying
+                LinkPaths = $r.LinkPaths; Right = $rightName; Label = $label; Kind = $kind
+                Members = $members
+            }
+        }
+    }
+    return $rows
+}
+
+function Get-GroupMemberSams {
+    <# Recursive members of one group, as lower-case sAMAccountNames. Empty on failure. #>
+    param([string]$Server, [string]$GroupName)
+
+    $key = "$GroupName".ToLower()
+    if ($script:GroupMemberCache.ContainsKey($key)) { return $script:GroupMemberCache[$key] }
+
+    $sams = @()
+    try {
+        if ($script:AdMode -eq 'Module') {
+            $p = @{ Identity = $GroupName; Recursive = $true; ErrorAction = 'Stop' }
+            if ($Server) { $p['Server'] = $Server }
+            $sams = @(Get-ADGroupMember @p | ForEach-Object { "$($_.SamAccountName)".ToLower() } | Where-Object { $_ })
+        }
+        elseif ($script:AdMode -eq 'LDAP') {
+            $g = @(Invoke-LdapSearch -Root $script:LdapRoot -Filter ("(&(objectClass=group)(samAccountName={0}))" -f $GroupName) -Props @('distinguishedname'))
+            if ($g.Count -gt 0) {
+                $dn = [string](Get-LdapVal $g[0] 'distinguishedname')
+                if ($dn) {
+                    # LDAP_MATCHING_RULE_IN_CHAIN - members at any nesting depth
+                    $f = "(memberOf:1.2.840.113556.1.4.1941:=$dn)"
+                    $sams = @(Invoke-LdapSearch -Root $script:LdapRoot -Filter $f -Props @('samaccountname') |
+                                ForEach-Object { "$(Get-LdapVal $_ 'samaccountname')".ToLower() } | Where-Object { $_ })
+                }
+            }
+        }
+    }
+    catch { }
+
+    $script:GroupMemberCache[$key] = @($sams)
+    return $script:GroupMemberCache[$key]
+}
+
+function Get-ManagedServiceAccounts {
+    <# gMSA and legacy sMSA objects. These are not returned by the user query. #>
+    param([string]$Server)
+
+    $out = @()
+    try {
+        if ($script:AdMode -eq 'Module') {
+            $p = @{ Filter = '*'; ErrorAction = 'Stop' }
+            if ($Server) { $p['Server'] = $Server }
+            foreach ($m in @(Get-ADServiceAccount @p -Properties Enabled, PasswordLastSet, Description, objectClass, PrincipalsAllowedToRetrieveManagedPassword)) {
+                $hosts = @()
+                try { $hosts = @((Get-Prop $m 'PrincipalsAllowedToRetrieveManagedPassword') | ForEach-Object { ($_ -split ',', 2)[0] -replace '^CN=', '' }) } catch { }
+                $out += [pscustomobject]@{
+                    Sam = "$($m.SamAccountName)"; Name = "$($m.Name)"; DN = "$($m.DistinguishedName)"
+                    Enabled = [bool](Get-Prop $m 'Enabled'); PwdLastSet = (Get-Prop $m 'PasswordLastSet')
+                    Description = [string](Get-Prop $m 'Description')
+                    Kind = $(if ("$($m.objectClass)" -match 'Group') { 'gMSA' } else { 'sMSA' })
+                    Hosts = @($hosts)
+                }
+            }
+        }
+        elseif ($script:AdMode -eq 'LDAP') {
+            $f = '(|(objectClass=msDS-GroupManagedServiceAccount)(objectClass=msDS-ManagedServiceAccount))'
+            foreach ($r in (Invoke-LdapSearch -Root $script:LdapRoot -Filter $f -Props @('samaccountname', 'name', 'distinguishedname', 'useraccountcontrol', 'pwdlastset', 'description', 'objectclass'))) {
+                $uac = 0
+                $uacRaw = Get-LdapVal $r 'useraccountcontrol'
+                if ($null -ne $uacRaw) { [void][int]::TryParse("$uacRaw", [ref]$uac) }
+                $classes = @(Get-LdapVals $r 'objectclass')
+                $out += [pscustomobject]@{
+                    Sam = [string](Get-LdapVal $r 'samaccountname'); Name = [string](Get-LdapVal $r 'name')
+                    DN = [string](Get-LdapVal $r 'distinguishedname'); Enabled = (($uac -band 0x2) -eq 0)
+                    PwdLastSet = (ConvertFrom-AdFileTime (Get-LdapVal $r 'pwdlastset'))
+                    Description = [string](Get-LdapVal $r 'description')
+                    Kind = $(if (($classes -join ' ') -match 'GroupManaged') { 'gMSA' } else { 'sMSA' })
+                    Hosts = @()
+                }
+            }
+        }
+    }
+    catch { }
+    return $out
+}
+
+function Get-ServiceAccountReview {
+    <#
+      Finds the accounts that look like service accounts, then works out whether
+      anything stops them being used to log on interactively.
+
+      Checked = $false means the directory could not be read - which is not the
+      same as "there are none", and the report says so.
+    #>
+    param([string]$Server, $Records, [int]$StaleDays)
+
+    $res = [pscustomobject]@{
+        Checked = $false; Error = ''
+        Accounts = @(); Rights = @(); DenyGpos = @(); AllowGpos = @()
+        AnyDenyPolicy = $false; Unrestricted = 0; Managed = 0
+    }
+
+    # ---- which GPOs set the interactive logon rights
+    $rights = @(Get-InteractiveLogonRights -Records $Records)
+    $res.Rights    = $rights
+    $res.DenyGpos  = @($rights | Where-Object { $_.Kind -eq 'Deny' })
+    $res.AllowGpos = @($rights | Where-Object { $_.Kind -eq 'Allow' })
+    $res.AnyDenyPolicy = (@($res.DenyGpos | Where-Object { $_.Applying }).Count -gt 0)
+
+    # ---- who those deny rules cover: named principals, plus group members
+    $deniedDirect = @{}   # lower-case sam or group leaf -> list of "GPO (right)"
+    $deniedVia    = @{}   # lower-case sam -> list of "Group via GPO (right)"
+    $catchAll     = @()
+    foreach ($d in @($res.DenyGpos | Where-Object { $_.Applying })) {
+        foreach ($m in @($d.Members)) {
+            $leaf = Get-PrincipalLeaf $m
+            if (-not $leaf) { continue }
+            $tag = ('{0} ({1})' -f $d.Gpo, $d.Label)
+            if ($script:CatchAllPrincipals -contains $leaf) { $catchAll += $tag; continue }
+            if (-not $deniedDirect.ContainsKey($leaf)) { $deniedDirect[$leaf] = @() }
+            if ($deniedDirect[$leaf] -notcontains $tag) { $deniedDirect[$leaf] += $tag }
+
+            foreach ($gm in @(Get-GroupMemberSams -Server $Server -GroupName $leaf)) {
+                if (-not $deniedVia.ContainsKey($gm)) { $deniedVia[$gm] = @() }
+                $via = ('{0} (member of {1})' -f $tag, $m)
+                if ($deniedVia[$gm] -notcontains $via) { $deniedVia[$gm] += $via }
+            }
+        }
+    }
+
+    # ---- candidate accounts
+    $accounts = @()
+    try {
+        $users = @(Get-DirUsers -Server $Server)
+        $res.Checked = $true
+
+        foreach ($u in $users) {
+            $sam  = "$($u.SamAccountName)"
+            if (-not $sam) { continue }
+            $samL = $sam.ToLower()
+            $desc = [string](Get-Prop $u 'Description')
+            $spns = @(Get-Prop $u 'ServicePrincipalNames')
+            if ($spns.Count -eq 0) { $spns = @(Get-Prop $u 'servicePrincipalName') }
+            $spns = @($spns | Where-Object { $_ })
+
+            $why = @()
+            if ($spns.Count -gt 0) { $why += ('Service principal name registered ({0})' -f $spns.Count) }
+            if ([bool](Get-Prop $u 'PasswordNeverExpires')) { $why += 'Password never expires' }
+            foreach ($pat in $script:ServiceAccountNamePatterns) {
+                if ($samL -match $pat) { $why += ('Name matches "{0}"' -f $pat); break }
+            }
+            if ($desc -and ($desc -match $script:ServiceAccountDescPattern)) { $why += 'Description mentions a service' }
+            $ll = Get-Prop $u 'LastLogonDate'
+            if ($why.Count -gt 0 -and -not $ll) { $why += 'Has never signed in' }
+
+            if ($why.Count -eq 0) { continue }
+
+            $accounts += [pscustomobject]@{
+                Sam = $sam; Name = "$($u.Name)"; DN = "$($u.DistinguishedName)"
+                OU = (("$($u.DistinguishedName)" -split ',', 2)[1])
+                Enabled = $(if ($null -ne (Get-Prop $u 'Enabled')) { [bool](Get-Prop $u 'Enabled') } else { $true })
+                Kind = 'User account'
+                Evidence = $why
+                Spns = @($spns)
+                PwdLastSet = (Get-Prop $u 'PasswordLastSet')
+                PwdAgeDays = $(if (Get-Prop $u 'PasswordLastSet') { [int]((Get-Date) - [datetime](Get-Prop $u 'PasswordLastSet')).TotalDays } else { $null })
+                LastLogon = $ll
+                Description = $desc
+                Privileged = (Get-PrivGroupsTextSafe $samL)
+                Hosts = @()
+            }
+        }
+
+        # ---- the managed ones: already rotating, nothing to restrict
+        foreach ($m in @(Get-ManagedServiceAccounts -Server $Server)) {
+            if (-not $m.Sam) { continue }
+            $accounts += [pscustomobject]@{
+                Sam = $m.Sam; Name = $m.Name; DN = $m.DN
+                OU = (("$($m.DN)" -split ',', 2)[1])
+                Enabled = $m.Enabled; Kind = $m.Kind
+                Evidence = @(('Managed service account ({0})' -f $m.Kind))
+                Spns = @(); PwdLastSet = $m.PwdLastSet
+                PwdAgeDays = $(if ($m.PwdLastSet) { [int]((Get-Date) - [datetime]$m.PwdLastSet).TotalDays } else { $null })
+                LastLogon = $null; Description = $m.Description
+                Privileged = (Get-PrivGroupsTextSafe ("$($m.Sam)".ToLower()))
+                Hosts = @($m.Hosts)
+            }
+        }
+    }
+    catch {
+        $res.Error = $_.Exception.Message
+        return $res
+    }
+
+    # ---- restriction status per account
+    $out = @()
+    foreach ($a in $accounts) {
+        $samL = "$($a.Sam)".ToLower().TrimEnd('$')
+        $by = @()
+        if ($catchAll.Count -gt 0) { $by += $catchAll }
+        if ($deniedDirect.ContainsKey($samL)) { $by += $deniedDirect[$samL] }
+        if ($deniedVia.ContainsKey($samL))    { $by += $deniedVia[$samL] }
+        $by = @($by | Select-Object -Unique)
+
+        $status = 'Not restricted'
+        if ($a.Kind -eq 'gMSA' -or $a.Kind -eq 'sMSA') {
+            $status = 'Managed - cannot log on interactively'
+        }
+        elseif ($by.Count -gt 0) {
+            $hasLocal = (@($by | Where-Object { $_ -match 'Deny log on locally' }).Count -gt 0)
+            $hasRdp   = (@($by | Where-Object { $_ -match 'Remote Desktop' }).Count -gt 0)
+            $status = if ($hasLocal -and $hasRdp) { 'Restricted' } else { 'Partly restricted' }
+        }
+
+        $out += [pscustomobject]@{
+            Sam = $a.Sam; Name = $a.Name; OU = $a.OU; Enabled = $a.Enabled; Kind = $a.Kind
+            Evidence = $a.Evidence; Spns = $a.Spns; PwdLastSet = $a.PwdLastSet; PwdAgeDays = $a.PwdAgeDays
+            LastLogon = $a.LastLogon; Description = $a.Description; Privileged = $a.Privileged
+            Hosts = $a.Hosts; Status = $status; RestrictedBy = $by
+        }
+    }
+
+    $res.Accounts     = @($out | Sort-Object @{ e = { @{ 'Not restricted' = 0; 'Partly restricted' = 1; 'Restricted' = 2 }[$_.Status] } }, Sam)
+    $res.Unrestricted = @($out | Where-Object { $_.Status -eq 'Not restricted' -and $_.Enabled }).Count
+    $res.Managed      = @($out | Where-Object { $_.Kind -ne 'User account' }).Count
+    return $res
+}
+
 # ---------------------------------------------------------- logon hours ----
 
 $logonScan = $null
@@ -1956,6 +2291,67 @@ if ($adAvailable) {
     catch { Write-Warn ("Logon-hours check failed: {0}" -f $_.Exception.Message) }
 }
 
+# --------------------------------------------------------- user inventory ---
+# Auditors ask for the complete list of user accounts, not just the exceptions.
+# Built straight from the directory so it is present even with -SkipCleanup.
+
+$userInv = [pscustomobject]@{ Checked = $false; Error = ''; Rows = @() }
+if ($adAvailable) {
+    Write-Step 'Building the full user inventory'
+    try {
+        $invNow  = Get-Date
+        $invRows = @()
+        foreach ($u in @(Get-DirUsers -Server $Server)) {
+            $sam = "$($u.SamAccountName)"
+            if (-not $sam) { continue }
+            $enRaw = Get-Prop $u 'Enabled'
+            $ll    = Get-Prop $u 'LastLogonDate'
+            $pls   = Get-Prop $u 'PasswordLastSet'
+            $wc    = Get-Prop $u 'whenCreated'
+            $invRows += [pscustomobject]@{
+                Sam          = $sam
+                Name         = "$($u.Name)"
+                Enabled      = $(if ($null -ne $enRaw) { [bool]$enRaw } else { $true })
+                EnabledKnown = ($null -ne $enRaw)
+                OU           = (("$($u.DistinguishedName)" -split ',', 2)[1])
+                Privileged   = (@($script:PrivMap["$($sam.ToLower())"]) -join ', ')
+                PwdLastSet   = $pls
+                PwdAgeDays   = $(if ($pls) { [int]($invNow - [datetime]$pls).TotalDays } else { $null })
+                PwdNever     = [bool](Get-Prop $u 'PasswordNeverExpires')
+                LastLogon    = $ll
+                DaysIdle     = $(if ($ll) { [int]($invNow - [datetime]$ll).TotalDays } elseif ($wc) { [int]($invNow - [datetime]$wc).TotalDays } else { $null })
+                Expires      = (Get-Prop $u 'AccountExpirationDate')
+                Created      = $wc
+                Description  = [string](Get-Prop $u 'Description')
+                Spns         = @(@(Get-Prop $u 'ServicePrincipalNames') | Where-Object { $_ }).Count
+            }
+        }
+        $userInv.Rows    = @($invRows | Sort-Object Sam)
+        $userInv.Checked = $true
+    }
+    catch { $userInv.Error = $_.Exception.Message; Write-Warn ("User inventory failed: {0}" -f $_.Exception.Message) }
+}
+else { $userInv.Error = $script:AdSkipReason }
+
+# ------------------------------------------------------- service accounts ---
+
+$svcReview = $null
+if (-not $SkipServiceAccounts -and $adAvailable) {
+    Write-Step 'Reviewing service accounts and interactive logon restrictions'
+    try { $svcReview = Get-ServiceAccountReview -Server $Server -Records $records -StaleDays $StaleUserDays }
+    catch { Write-Warn ("Service account review failed: {0}" -f $_.Exception.Message) }
+}
+if ($null -eq $svcReview) {
+    $svcReview = [pscustomobject]@{
+        Checked = $false
+        Error = $(if ($SkipServiceAccounts) { 'Skipped - the report was run with -SkipServiceAccounts.' }
+                  elseif (-not $adAvailable) { 'Active Directory was not reachable.' }
+                  else { 'The review did not run.' })
+        Accounts = @(); Rights = @(); DenyGpos = @(); AllowGpos = @()
+        AnyDenyPolicy = $false; Unrestricted = 0; Managed = 0
+    }
+}
+
 # ------------------------------------------------------------ html builder --
 
 Write-Step 'Building master report'
@@ -1963,6 +2359,22 @@ Write-Step 'Building master report'
 
 $css = @'
 :root{--bg:#f6f7f9;--card:#fff;--ink:#1b1f24;--mut:#5c6673;--line:#dfe3e8;--accent:__ACCENT__;--onacc:__ONACC__;--warn:#b45309;--bad:#b91c1c;--ok:#15803d;--chip:#eef1f5}
+@media print{
+  :root{--bg:#fff;--card:#fff;--ink:#111;--mut:#444;--line:#bbb;--chip:#f1f4f8;--accent:#0b5fff;--onacc:#fff}
+  nav.side{display:none !important}
+  .shell{display:block}
+  main{padding:0;max-width:none;min-width:0}
+  .toolbar,.tblbar,.noprint,button{display:none !important}
+  body{background:#fff;font-size:10.5pt}
+  section.view{display:none}
+  section.view.on{display:block}
+  h1{font-size:16pt}
+  h2{font-size:13pt;page-break-after:avoid}
+  tr{page-break-inside:avoid}
+  .area,.grp,.lhuser,details.grow{page-break-inside:avoid}
+  .tbl th{position:static}
+  a{color:inherit;text-decoration:none}
+}
 @media (prefers-color-scheme:dark){:root{--bg:#111418;--card:#181c21;--ink:#e6e9ee;--mut:#98a2b0;--line:#2a3038;--accent:__ACCENT_DARK__;--onacc:__ONACC_DARK__;--warn:#f0b429;--bad:#f87171;--ok:#4ade80;--chip:#232931}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 "Segoe UI",system-ui,-apple-system,sans-serif}
@@ -2094,8 +2506,22 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
 .tbl th{text-align:left;padding:8px 10px;background:var(--chip);color:var(--mut);border-bottom:1px solid var(--line);font-size:11px;text-transform:uppercase;letter-spacing:.03em;position:sticky;top:0}
 .tbl td{padding:6px 10px;border-bottom:1px solid var(--line);vertical-align:top}
 .tblbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:14px 0 12px}
+.stat.statf{cursor:pointer;user-select:none;transition:border-color .12s,box-shadow .12s}
+.stat.statf:hover{border-color:var(--accent)}
+.stat.statf:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.stat.statf.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.stat.statf.on b{color:var(--accent)}
+table.grid{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:8px;font-size:12.5px;margin:10px 0 6px}
+table.grid th{text-align:left;padding:8px 10px;background:var(--chip);color:var(--mut);border-bottom:1px solid var(--line);font-size:11px;text-transform:uppercase;letter-spacing:.03em}
+table.grid td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top;line-height:1.5}
+table.grid tr:last-child td{border-bottom:none}
+#view-svcacct .missing{margin-left:0;font-weight:400;line-height:1.55;padding:11px 13px}
+#view-svcacct .missing b{font-weight:700}
+#view-svcacct td.bad{color:var(--bad)} #view-svcacct td.warn{color:var(--warn)} #view-svcacct td.ok{color:var(--ok)}
 
 .tblbar input[type=search]{flex:1 1 280px;min-width:200px;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink)}
+.tblbar select,.tblbar button{padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);cursor:pointer}
+.tblbar button:hover{border-color:var(--accent);color:var(--accent)}
 .days{font-variant-numeric:tabular-nums;white-space:nowrap}
 .lhuser{background:var(--card);border:1px solid var(--line);border-radius:8px;margin-bottom:10px;padding:12px 14px;display:flex;flex-wrap:wrap;gap:18px}
 .lhwho{flex:1 1 300px;min-width:260px}
@@ -2205,6 +2631,7 @@ function applyLogonFilter(){
   var term = norm(q.value).trim();
   var mode = document.getElementById('fLogon').value;
   var incDisabled = document.getElementById('fLogonDis').checked;
+  if (mode === 'dis') incDisabled = true;
   var n = 0;
   document.querySelectorAll('#tbl-logon .lhuser').forEach(function(u){
     var ok = (term === '') || norm(u.dataset.k).indexOf(term) >= 0;
@@ -2214,11 +2641,139 @@ function applyLogonFilter(){
       if (mode === 'never' && u.dataset.never !== '1') ok = false;
       if (mode === 'ws'    && u.dataset.ws    !== '1') ok = false;
       if (mode === 'exp'   && u.dataset.exp   !== '1') ok = false;
+      if (mode === 'dis'   && u.dataset.enabled !== '0') ok = false;
     }
     u.style.display = ok ? '' : 'none';
     if (ok) n++;
   });
   document.getElementById('cnt-logon').textContent = n;
+  var box = document.getElementById('fLogonDis').checked ? '1' : '0';
+  document.querySelectorAll('#view-logon .statf').forEach(function(s){
+    s.classList.toggle('on', s.dataset.f === mode && s.dataset.dis === box);
+  });
+}
+function setLogonFilter(mode, dis){
+  var sel = document.getElementById('fLogon');
+  if (!sel) return;
+  sel.value = mode;
+  document.getElementById('fLogonDis').checked = (dis === '1');
+  applyLogonFilter();
+}
+function exportVisibleCards(containerId, filename){
+  var box = document.getElementById(containerId);
+  if (!box) return;
+  var lines = [];
+  if (box.dataset.csvhead) lines.push(box.dataset.csvhead);
+  box.querySelectorAll('[data-csv]').forEach(function(c){
+    if (c.style.display === 'none' || c.offsetParent === null) return;
+    lines.push(c.dataset.csv);
+  });
+  downloadCsv(lines, filename);
+}
+function downloadCsv(lines, filename){
+  var blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+}
+function flash(btn, word){
+  var o = btn.textContent; btn.textContent = word;
+  setTimeout(function(){ btn.textContent = o; }, 1400);
+}
+function wireTools(){
+  document.querySelectorAll('button.btnCsv').forEach(function(b){
+    b.addEventListener('click', function(){
+      if (b.dataset.cards) exportVisibleCards(b.dataset.cards, b.dataset.file || 'export.csv');
+      else exportVisibleRows(b.dataset.table, b.dataset.file || 'export.csv');
+      flash(b, 'Exported');
+    });
+  });
+  document.querySelectorAll('button.btnPrint').forEach(function(b){
+    b.addEventListener('click', function(){ window.print(); });
+  });
+}
+function csvCell(v){
+  v = (v || '').replace(/\s+/g, ' ').trim();
+  return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+}
+function exportVisibleRows(tableId, filename){
+  var table = document.getElementById(tableId);
+  if (!table) return;
+  var head = table.querySelector('tr');
+  var cols = [].slice.call(head.children).map(function(th){ return csvCell(th.textContent); });
+  var lines = [cols.join(',')];
+  [].slice.call(table.rows).forEach(function(r){
+    if (r === head) return;
+    if (r.offsetParent === null && r.style.display === 'none') return;
+    if (r.style.display === 'none') return;
+    lines.push([].slice.call(r.cells).map(function(td){ return csvCell(td.textContent); }).join(','));
+  });
+  downloadCsv(lines, filename);
+}
+function applyTblFilter(sel){
+  var t = document.querySelector(sel);
+  if (!t) return;
+  var inp = document.querySelector('input.tblq[data-target="' + sel + '"]');
+  var term = inp ? norm(inp.value).trim() : '';
+  var checks = [].slice.call(document.querySelectorAll('input.tblf[data-filter-target="' + sel + '"]'));
+  var n = 0;
+  t.querySelectorAll('.row').forEach(function(r){
+    var ok = (term === '') || norm(r.dataset.k).indexOf(term) >= 0;
+    if (ok) {
+      checks.forEach(function(cb){
+        if (cb.checked && r.dataset[cb.dataset.attr] !== cb.dataset.val) ok = false;
+      });
+    }
+    r.style.display = ok ? '' : 'none';
+    if (ok) n++;
+  });
+  if (inp && inp.dataset.count) {
+    var c = document.getElementById(inp.dataset.count);
+    if (c) c.textContent = n;
+  }
+}
+function applyInvFilter(){
+  var q = document.getElementById('qInv');
+  if (!q) return;
+  var term = norm(q.value).trim();
+  var mode = document.getElementById('fInv').value;
+  var n = 0;
+  document.querySelectorAll('#tbl-inv .invrow').forEach(function(r){
+    var ok = (term === '') || norm(r.dataset.k).indexOf(term) >= 0;
+    if (ok) {
+      if (mode === 'enabled'  && r.dataset.en    !== '1') ok = false;
+      if (mode === 'disabled' && r.dataset.en    !== '0') ok = false;
+      if (mode === 'priv'     && r.dataset.priv  !== '1') ok = false;
+      if (mode === 'never'    && r.dataset.never !== '1') ok = false;
+      if (mode === 'pne'      && r.dataset.pne   !== '1') ok = false;
+    }
+    r.style.display = ok ? '' : 'none';
+    if (ok) n++;
+  });
+  var c = document.getElementById('cnt-inv');
+  if (c) c.textContent = n;
+  document.querySelectorAll('#view-allusers .statf').forEach(function(s){
+    s.classList.toggle('on', s.dataset.f === mode);
+  });
+}
+function setInvFilter(mode){
+  var sel = document.getElementById('fInv');
+  if (!sel) return;
+  sel.value = mode;
+  applyInvFilter();
+}
+function applySvcFilter(){
+  var q = document.getElementById('qSvc');
+  if (!q) return;
+  var term = norm(q.value).trim();
+  var onlyUn = document.getElementById('fSvcUn').checked;
+  document.querySelectorAll('#tbl-svc .svcrow').forEach(function(r){
+    var ok = (term === '') || norm(r.innerText).indexOf(term) >= 0;
+    if (ok && onlyUn && r.dataset.un !== '1') ok = false;
+    r.style.display = ok ? '' : 'none';
+  });
 }
 function copyFallback(text, done){
   var ta = document.createElement('textarea');
@@ -2293,27 +2848,47 @@ document.addEventListener('DOMContentLoaded', function(){
   document.getElementById('fSet').addEventListener('change', applyFilter);
   document.getElementById('fLink').addEventListener('change', applyFilter);
   document.getElementById('fApply').addEventListener('change', applyFocusFilter);
+  if (document.getElementById('qInv')) {
+    document.getElementById('qInv').addEventListener('input', applyInvFilter);
+    document.getElementById('fInv').addEventListener('change', applyInvFilter);
+    var bx = document.getElementById('bInvCsv');
+    if (bx) {
+      bx.addEventListener('click', function(){
+        exportVisibleRows('tbl-inv', bx.dataset.file || 'users.csv');
+        var o = bx.textContent; bx.textContent = 'Exported';
+        setTimeout(function(){ bx.textContent = o; }, 1400);
+      });
+    }
+    document.querySelectorAll('#view-allusers .statf').forEach(function(s){
+      s.addEventListener('click', function(){ setInvFilter(s.dataset.f); });
+      s.addEventListener('keydown', function(e){
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setInvFilter(s.dataset.f); }
+      });
+    });
+  }
+  if (document.getElementById('qSvc')) {
+    document.getElementById('qSvc').addEventListener('input', applySvcFilter);
+    document.getElementById('fSvcUn').addEventListener('change', applySvcFilter);
+  }
   if (document.getElementById('qLogon')) {
     document.getElementById('qLogon').addEventListener('input', applyLogonFilter);
     document.getElementById('fLogon').addEventListener('change', applyLogonFilter);
     document.getElementById('fLogonDis').addEventListener('change', applyLogonFilter);
+    document.querySelectorAll('#view-logon .statf').forEach(function(s){
+      s.addEventListener('click', function(){ setLogonFilter(s.dataset.f, s.dataset.dis); });
+      s.addEventListener('keydown', function(e){
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setLogonFilter(s.dataset.f, s.dataset.dis); }
+      });
+    });
     applyLogonFilter();
   }
   document.querySelectorAll('input.tblq').forEach(function(inp){
-    inp.addEventListener('input', function(){
-      var t = document.querySelector(inp.dataset.target);
-      if (!t) return;
-      var term = norm(inp.value).trim();
-      var n = 0;
-      t.querySelectorAll('.row').forEach(function(r){
-        var ok = (term === '') || norm(r.dataset.k).indexOf(term) >= 0;
-        r.style.display = ok ? '' : 'none';
-        if (ok) n++;
-      });
-      var c = document.getElementById(inp.dataset.count);
-      if (c) c.textContent = n;
-    });
+    inp.addEventListener('input', function(){ applyTblFilter(inp.dataset.target); });
   });
+  document.querySelectorAll('input.tblf').forEach(function(cb){
+    cb.addEventListener('change', function(){ applyTblFilter(cb.dataset.filterTarget); });
+  });
+  wireTools();
   document.getElementById('bExpand').addEventListener('click', function(){ setAll(true); });
   document.getElementById('bCollapse').addEventListener('click', function(){ setAll(false); });
   document.querySelectorAll('table.tbl, .grp table, .appendix table, table.psotbl').forEach(makeSortable);
@@ -2505,10 +3080,18 @@ if (-not $SkipPrivilegedGroups) {
 $lrCount = if ($logonScan) { $logonScan.Rows.Count } else { '&ndash;' }
 A ("<a class='nav' data-view='logon' href='#'>Logon restrictions<span class='n'>{0}</span></a>" -f $lrCount)
 
+$svcCount = '&ndash;'
+if ($svcReview.Checked) { $svcCount = @($svcReview.Accounts).Count }
+A ("<a class='nav' data-view='svcacct' href='#'>Service accounts<span class='n'>{0}</span></a>" -f $svcCount)
+
 A '<div class="grouplbl">Inventory</div>'
 A ("<a class='nav' data-view='gpos' href='#'>All GPOs<span class='n'>{0}</span></a>" -f $records.Count)
 A ("<a class='nav' data-view='scope' href='#'>Scope index<span class='n'>{0}</span></a>" -f @($flatScope | Where-Object { $_.SOMPath -ne '(not linked)' }).Count)
 A ("<a class='nav' data-view='unlinked' href='#'>Unlinked GPOs<span class='n'>{0}</span></a>" -f $unlinked.Count)
+
+$invCount = '&ndash;'
+if ($userInv.Checked) { $invCount = @($userInv.Rows).Count }
+A ("<a class='nav' data-view='allusers' href='#'>All users<span class='n'>{0}</span></a>" -f $invCount)
 
 if (-not $SkipCleanup) {
     A '<div class="grouplbl">Cleanup</div>'
@@ -2631,13 +3214,27 @@ else {
     $lrLive  = @($lrAll | Where-Object { $_.Enabled })
 
     A '<div class="stats">'
-    A ("<div class='stat'><b>{0}</b><span>Users examined</span></div>" -f $logonScan.Total)
-    A ("<div class='stat'><b>{0}</b><span>Restricted &amp; enabled</span></div>" -f $lrLive.Count)
-    A ("<div class='stat'><b>{0}</b><span>Hour restricted</span></div>" -f $lrHours.Count)
-    A ("<div class='stat'><b>{0}</b><span>Can never sign in</span></div>" -f $lrNever.Count)
-    A ("<div class='stat'><b>{0}</b><span>Workstation restricted</span></div>" -f $lrWs.Count)
-    A ("<div class='stat'><b>{0}</b><span>Account expires</span></div>" -f $lrExp.Count)
-    A ("<div class='stat'><b>{0}</b><span>Disabled (hidden)</span></div>" -f $lrDis.Count)
+    if ($lrAll.Count -gt 0) {
+        A '<div class="sub noprint" style="flex-basis:100%;margin:0 0 -4px">Click a tile to filter the list below.</div>'
+    }
+    $lrTiles = @(
+        @{ N = $logonScan.Total; L = 'Users examined';         F = 'all';   D = '1'; T = 'Show every restricted account, including disabled ones' },
+        @{ N = $lrLive.Count;    L = 'Restricted &amp; enabled'; F = 'all'; D = '0'; T = 'Show the enabled accounts that carry a restriction' },
+        @{ N = $lrHours.Count;   L = 'Hour restricted';        F = 'hours'; D = '0'; T = 'Show only accounts limited by logon hours' },
+        @{ N = $lrNever.Count;   L = 'Can never sign in';      F = 'never'; D = '0'; T = 'Show only accounts whose schedule denies every hour' },
+        @{ N = $lrWs.Count;      L = 'Workstation restricted'; F = 'ws';    D = '0'; T = 'Show only accounts limited to named computers' },
+        @{ N = $lrExp.Count;     L = 'Account expires';        F = 'exp';   D = '0'; T = 'Show only accounts with an expiry date' },
+        @{ N = $lrDis.Count;     L = 'Disabled (hidden)';      F = 'dis';   D = '1'; T = 'Show only the disabled accounts that carry a restriction' }
+    )
+    foreach ($t in $lrTiles) {
+        if ($lrAll.Count -eq 0) {
+            A ("<div class='stat'><b>{0}</b><span>{1}</span></div>" -f $t.N, $t.L)
+        }
+        else {
+            A ("<div class='stat statf' data-f='{2}' data-dis='{3}' role='button' tabindex='0' title='{4}'><b>{0}</b><span>{1}</span></div>" -f `
+                $t.N, $t.L, $t.F, $t.D, (HtmlEnc $t.T))
+        }
+    }
     A '</div>'
 
     if ($lrAll.Count -eq 0) {
@@ -2660,22 +3257,40 @@ else {
         A '<option value="never">Can never sign in</option>'
         A '<option value="ws">Workstation restricted</option>'
         A '<option value="exp">Account expires</option>'
+        A '<option value="dis">Disabled accounts only</option>'
         A '</select>'
         A ("<label style='color:var(--mut);display:flex;gap:6px;align-items:center;cursor:pointer'><input type='checkbox' id='fLogonDis'> Include disabled accounts ({0})</label>" -f $lrDis.Count)
-        A ("<span class='sub'><b id='cnt-logon'>{0}</b> shown</span></div>" -f $lrLive.Count)
+        A ("<span class='sub'><b id='cnt-logon'>{0}</b> shown</span>" -f $lrLive.Count)
+        A ("<button type='button' class='btnCsv noprint' data-cards='tbl-logon' data-file='LogonRestrictions-{0}-{1}.csv'>Export this view to CSV</button>" -f `
+            ($Domain -replace '[^\w\.\-]', '_'), (Get-Date -Format 'yyyyMMdd'))
+        A '<button type="button" class="btnPrint noprint">Print this view</button></div>'
 
-        A '<div id="tbl-logon">'
+        A ("<div id=""tbl-logon"" data-csvhead=""{0}"">" -f (HtmlEnc 'Name,Account,Enabled,OU,HourRestricted,NeverAllowed,AllowedHours,Schedule,Workstations,Expires,LastLogon'))
         foreach ($lr in $lrAll) {
 
             $k = (@($lr.Name, $lr.Sam, $lr.OU, $lr.Workstations, ($lr.Summary -replace '&middot;', ' ')) -join ' ')
 
-            A ("<div class='lhuser' data-k='{0}' data-hours='{1}' data-never='{2}' data-ws='{3}' data-exp='{4}' data-enabled='{5}'>" -f `
+            $lrCsv = (@(
+                (Format-CsvField $lr.Name), (Format-CsvField $lr.Sam),
+                (Format-CsvField $(if ($lr.Enabled) { 'Enabled' } else { 'Disabled' })),
+                (Format-CsvField $lr.OU),
+                (Format-CsvField $(if ($lr.HourRestricted) { 'Yes' } else { 'No' })),
+                (Format-CsvField $(if ($lr.NeverAllowed) { 'Yes' } else { 'No' })),
+                (Format-CsvField $lr.AllowedHours),
+                (Format-CsvField ($lr.Summary -replace '&middot;', '|')),
+                (Format-CsvField $lr.Workstations),
+                (Format-CsvField $(if ($lr.Expires) { ([datetime]$lr.Expires).ToString('yyyy-MM-dd') } else { '' })),
+                (Format-CsvField $(if ($lr.LastLogon) { ([datetime]$lr.LastLogon).ToString('yyyy-MM-dd') } else { 'Never' }))
+            ) -join ',')
+
+            A ("<div class='lhuser' data-k='{0}' data-hours='{1}' data-never='{2}' data-ws='{3}' data-exp='{4}' data-enabled='{5}' data-csv='{6}'>" -f `
                 (HtmlEnc $k),
                 $(if ($lr.HourRestricted) { '1' } else { '0' }),
                 $(if ($lr.NeverAllowed)   { '1' } else { '0' }),
                 $(if ($lr.Workstations)   { '1' } else { '0' }),
                 $(if ($null -ne $lr.Expires) { '1' } else { '0' }),
-                $(if ($lr.Enabled) { '1' } else { '0' }))
+                $(if ($lr.Enabled) { '1' } else { '0' }),
+                (HtmlEnc $lrCsv))
 
             A '<div class="lhwho"><h4>'
             A (HtmlEnc $lr.Name)
@@ -2724,12 +3339,111 @@ else {
 }
 A '</section>'
 
+
+# ================================================== VIEW: SERVICE ACCOUNTS =
+A '<section class="view" id="view-svcacct">'
+A '<h1>Service accounts</h1>'
+A '<div class="sub">Accounts that look like they run a service, and whether anything stops them being used to sign in at a console or over Remote Desktop. Active Directory has no attribute that marks an account as a service account, so each row shows the evidence it was matched on &ndash; review the list rather than treating it as definitive.</div>'
+
+if (-not $svcReview.Checked) {
+    A ("<div class='missing'><b>NOT CHECKED.</b> {0} Absence below is not evidence that there are no service accounts.</div>" -f (HtmlEnc $svcReview.Error))
+}
+else {
+    $svcAll    = @($svcReview.Accounts)
+    $svcUnres  = @($svcAll | Where-Object { $_.Status -eq 'Not restricted' -and $_.Enabled })
+    $svcPart   = @($svcAll | Where-Object { $_.Status -eq 'Partly restricted' })
+    $svcMgd    = @($svcAll | Where-Object { $_.Kind -ne 'User account' })
+    $denyApply = @($svcReview.DenyGpos | Where-Object { $_.Applying })
+
+    A '<div class="stats">'
+    A ("<div class='stat'><b>{0}</b><span>Look like service accounts</span></div>" -f $svcAll.Count)
+    A ("<div class='stat'><b style='color:{1}'>{0}</b><span>Not restricted</span></div>" -f $svcUnres.Count, $(if ($svcUnres.Count -gt 0) { 'var(--bad)' } else { 'var(--ok)' }))
+    A ("<div class='stat'><b>{0}</b><span>Partly restricted</span></div>" -f $svcPart.Count)
+    A ("<div class='stat'><b>{0}</b><span>Managed (gMSA / sMSA)</span></div>" -f $svcMgd.Count)
+    A ("<div class='stat'><b>{0}</b><span>GPOs denying interactive logon</span></div>" -f @($denyApply | Select-Object -ExpandProperty Gpo -Unique).Count)
+    A '</div>'
+
+    # ---- is there an interactive logon GPO at all
+    A '<h2>Interactive logon policy</h2>'
+    if (@($svcReview.Rights).Count -eq 0) {
+        A '<div class="missing"><b>No Group Policy Object sets any interactive logon right.</b> Nothing in this domain grants or denies "Log on locally" or "Log on through Remote Desktop Services", so the Windows defaults apply &ndash; which means any enabled account can sign in at a console on machines where it has access, including every account below.</div>'
+    }
+    else {
+        A '<div class="sub">Every applying GPO that sets one of the four interactive logon rights, and the principals it names.</div>'
+        A '<table class="grid"><thead><tr><th style="width:21%">Right</th><th style="width:9%">Type</th><th style="width:20%">GPO</th><th style="width:9%">Applying</th><th>Principals named</th></tr></thead><tbody>'
+        foreach ($rt in @($svcReview.Rights | Sort-Object @{ e = { $_.Kind } }, Label, Gpo)) {
+            $mem = if (@($rt.Members).Count -gt 0) { (@($rt.Members) -join '; ') } else { '(no members defined - the right is granted to nobody)' }
+            A ("<tr><td><b>{0}</b><div class='mut' style='font-size:11px'>{1}</div></td><td>{2}</td><td><a href='#' onclick=""return gotoGpo('{3}')"">{4}</a></td><td>{5}</td><td>{6}</td></tr>" -f `
+                (HtmlEnc $rt.Label), (HtmlEnc $rt.Right), `
+                $(if ($rt.Kind -eq 'Deny') { '<span class="badge ok">Deny</span>' } else { '<span class="badge warn">Allow</span>' }), `
+                $rt.Anchor, (HtmlEnc $rt.Gpo), `
+                $(if ($rt.Applying) { '<span class="badge ok">Yes</span>' } else { '<span class="badge warn">No</span>' }), `
+                (HtmlEnc $mem))
+        }
+        A '</tbody></table>'
+        if ($denyApply.Count -eq 0) {
+            A '<div class="missing">None of the applying GPOs <b>deny</b> interactive logon. Only grants are configured, so nothing prevents a service account signing in interactively.</div>'
+        }
+    }
+
+    # ---- the accounts
+    A '<h2>Accounts that look like service accounts</h2>'
+    if ($svcAll.Count -eq 0) {
+        A '<div class="missing">No account matched any of the service-account signals: a registered service principal name, a non-expiring password, a naming pattern, or a description mentioning a service. If you know there are service accounts here, add your naming convention to $script:ServiceAccountNamePatterns near the top of the script.</div>'
+    }
+    else {
+        A '<div class="tblbar"><input type="search" id="qSvc" placeholder="Filter service accounts..."><label style="color:var(--mut);display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="fSvcUn"> Only accounts that are not restricted</label>'
+        A ("<button type='button' class='btnCsv noprint' data-table='tbl-svc' data-file='ServiceAccounts-{0}-{1}.csv'>Export this view to CSV</button>" -f `
+            ($Domain -replace '[^\w\.\-]', '_'), (Get-Date -Format 'yyyyMMdd'))
+        A '<button type="button" class="btnPrint noprint">Print this view</button></div>'
+        A '<table class="tbl" id="tbl-svc"><tr><th>Account</th><th>Name</th><th>Type</th><th>Interactive logon</th><th>Why it was flagged</th><th>Privileged</th><th>Password age</th><th>Last logon</th><th>State</th></tr>'
+        foreach ($s in $svcAll) {
+            $stCls = switch ($s.Status) {
+                'Not restricted'    { 'bad' }
+                'Partly restricted' { 'warn' }
+                default             { 'ok' }
+            }
+            $stTxt = HtmlEnc $s.Status
+            if (@($s.RestrictedBy).Count -gt 0) {
+                $stTxt += ("<div class='mut' style='font-size:11px'>{0}</div>" -f (HtmlEnc ((@($s.RestrictedBy) | Select-Object -First 3) -join '; ')))
+            }
+            $kindCell = if ($s.Kind -eq 'User account') { 'User account' } else { ("<span class='badge ok'>{0}</span>" -f (HtmlEnc $s.Kind)) }
+            $pwdCell  = if ($null -ne $s.PwdAgeDays) { ('{0} days' -f $s.PwdAgeDays) } else { 'Unknown' }
+            if ($s.Kind -ne 'User account') { $pwdCell += '<div class="mut" style="font-size:11px">rotates automatically</div>' }
+            A ("<tr class='svcrow' data-un='{8}'><td class='mono'>{0}</td><td>{1}</td><td>{2}</td><td class='{3}'><b>{4}</b></td><td style='font-size:12px'>{5}</td><td>{6}</td><td class='days'>{7}</td><td class='days'>{9}</td><td>{10}</td></tr>" -f `
+                (HtmlEnc $s.Sam), (HtmlEnc $s.Name), $kindCell, $stCls, $stTxt, `
+                (HtmlEnc ((@($s.Evidence)) -join '; ')), `
+                $(if ($s.Privileged) { ("<span class='badge bad'>{0}</span>" -f (HtmlEnc $s.Privileged)) } else { '' }), `
+                $pwdCell, `
+                $(if ($s.Status -eq 'Not restricted' -and $s.Enabled) { '1' } else { '0' }), `
+                $(if ($s.LastLogon) { ([datetime]$s.LastLogon).ToString('yyyy-MM-dd') } else { 'Never' }), `
+                $(if ($s.Enabled) { 'Enabled' } else { '<span class="mut">Disabled</span>' }))
+        }
+        A '</table>'
+    }
+
+    # ---- what to do about it
+    A '<h2>What to do with an unrestricted service account</h2>'
+    A '<div class="area" style="margin-top:8px">'
+    A '<h3 style="font-size:14px">Option 1 &ndash; deny it interactive logon</h3>'
+    A '<div class="hint" style="margin-left:0">Put the service accounts into a security group and add that group to <b>Deny log on locally</b> and <b>Deny log on through Remote Desktop Services</b>, in a GPO linked where those accounts could otherwise sign in.</div>'
+    A '<div class="missing" style="margin-left:0;font-weight:400">Leave <b>Log on as a service</b> and <b>Log on as a batch job</b> in place. Services and scheduled tasks need those rights &ndash; removing them stops the application.</div>'
+    A '<h3 style="font-size:14px">Option 2 &ndash; convert it to a group Managed Service Account (gMSA)</h3>'
+    A '<div class="hint" style="margin-left:0">Active Directory owns the password for a gMSA. It generates a 240-character random password, <b>rotates it automatically every 30 days by default</b>, and hands it only to the hosts you authorise. Nobody ever knows the password, it cannot be typed at a logon prompt, and it never has to be rotated by hand &ndash; which also removes the "password never expires" exception that service accounts usually carry.<br><br>The domain needs a KDS root key (created once), and the application has to support gMSA. SQL Server, IIS application pools and scheduled tasks do; many third-party applications do not. Where one does not, document the exception and rotate the password on a defined schedule.</div>'
+    A '</div>'
+}
+A '</section>'
+
 # ==================================================== VIEW: PRIVILEGED =====
 A '<section class="view" id="view-priv">'
 A '<h1>Privileged group membership</h1>'
 if ($privGroups.Count -gt 0) {
     A '<div class="sub">Effective membership, including users inherited through nested groups. Disabled accounts, non-expiring passwords and stale logons are flagged.</div>'
-    A '<div style="height:16px"></div>'
+    A '<div class="tblbar">'
+    A ("<button type='button' class='btnCsv noprint' data-cards='priv-all' data-file='PrivilegedGroups-{0}-{1}.csv'>Export this view to CSV</button>" -f `
+        ($Domain -replace '[^\w\.\-]', '_'), (Get-Date -Format 'yyyyMMdd'))
+    A '<button type="button" class="btnPrint noprint">Print this view</button></div>'
+    A ("<div id=""priv-all"" data-csvhead=""{0}"">" -f (HtmlEnc 'Group,Member,Account,Membership,AccountState,PasswordNeverExpires,PasswordLastSet,LastLogon'))
 
     foreach ($pg in $privGroups) {
 
@@ -2775,10 +3489,19 @@ if ($privGroups.Count -gt 0) {
                 }
                 $pls = if ($null -ne $m.PwdLastSet) { '<td data-s="{0:yyyy-MM-dd}">{0:yyyy-MM-dd}</td>' -f $m.PwdLastSet } else { '<td data-s="1000-01-01"><span class="badge bad">never</span></td>' }
 
-                A ("<tr><td>{0}</td><td class='mono'>{1}</td><td>{2}</td><td>{3}</td>{4}{5}</tr>" -f `
+                $mCsv = (@(
+                    (Format-CsvField $pg.Label), (Format-CsvField $m.Name), (Format-CsvField $m.Sam),
+                    (Format-CsvField $(if ($m.Direct) { 'Direct' } else { 'Nested' })),
+                    (Format-CsvField $(if ($m.Enabled -eq $false) { 'Disabled' } elseif ($m.Enabled -eq $true) { 'Enabled' } else { 'Unknown' })),
+                    (Format-CsvField $(if ($m.PwdNeverExpires -eq $true) { 'Yes' } else { 'No' })),
+                    (Format-CsvField $(if ($null -ne $m.PwdLastSet) { ('{0:yyyy-MM-dd}' -f $m.PwdLastSet) } else { 'Never' })),
+                    (Format-CsvField $(if ($null -ne $m.LastLogon) { ('{0:yyyy-MM-dd}' -f $m.LastLogon) } else { 'Never' }))
+                ) -join ',')
+
+                A ("<tr data-csv='{6}'><td>{0}</td><td class='mono'>{1}</td><td>{2}</td><td>{3}</td>{4}{5}</tr>" -f `
                     (HtmlEnc $m.Name), (HtmlEnc $m.Sam),
                     $(if ($m.Direct) { 'Direct' } else { '<span class="badge warn">Nested</span>' }),
-                    $state, $pls, $ll)
+                    $state, $pls, $ll, (HtmlEnc $mCsv))
             }
             A '</table>'
         }
@@ -2788,6 +3511,7 @@ if ($privGroups.Count -gt 0) {
         }
         A '</div>'
     }
+    A '</div>'
 }
 elseif ($SkipPrivilegedGroups) {
     A '<div class="sub">Not collected &ndash; this report was run with -SkipPrivilegedGroups.</div>'
@@ -2929,6 +3653,69 @@ function Write-WhenCell {
     return ('<td data-s="{0:yyyy-MM-dd}">{0:yyyy-MM-dd}</td>' -f $When)
 }
 
+# =================================================== VIEW: USER INVENTORY ==
+A '<section class="view" id="view-allusers">'
+A '<h1>All user accounts</h1>'
+if (-not $userInv.Checked) {
+    A ("<div class='missing' style='margin-left:0'>NOT CHECKED &ndash; {0}</div>" -f (HtmlEnc $userInv.Error))
+}
+else {
+    $invRowsAll = @($userInv.Rows)
+    $invEn   = @($invRowsAll | Where-Object { $_.Enabled })
+    $invDis  = @($invRowsAll | Where-Object { -not $_.Enabled })
+    $invPriv = @($invRowsAll | Where-Object { $_.Privileged })
+    $invNever = @($invRowsAll | Where-Object { -not $_.LastLogon })
+    $invPne  = @($invRowsAll | Where-Object { $_.PwdNever })
+
+    A ("<div class='sub'>Every user account in {0}, as read from the directory on {1}. This is the complete inventory auditors ask for &ndash; the Cleanup views list only the exceptions. The same list is in AllUsers.csv in this folder.</div>" -f `
+        (HtmlEnc $Domain), (Get-Date -Format 'yyyy-MM-dd HH:mm'))
+
+    # each tile filters the table below it
+    A '<div class="stats">'
+    A ("<div class='stat statf on' data-f='all' role='button' tabindex='0'><b>{0}</b><span>User accounts</span></div>" -f $invRowsAll.Count)
+    A ("<div class='stat statf' data-f='enabled' role='button' tabindex='0'><b>{0}</b><span>Enabled</span></div>" -f $invEn.Count)
+    A ("<div class='stat statf' data-f='disabled' role='button' tabindex='0'><b>{0}</b><span>Disabled</span></div>" -f $invDis.Count)
+    A ("<div class='stat statf' data-f='priv' role='button' tabindex='0'><b>{0}</b><span>Privileged</span></div>" -f $invPriv.Count)
+    A ("<div class='stat statf' data-f='never' role='button' tabindex='0'><b>{0}</b><span>Never signed in</span></div>" -f $invNever.Count)
+    A ("<div class='stat statf' data-f='pne' role='button' tabindex='0'><b>{0}</b><span>Password never expires</span></div>" -f $invPne.Count)
+    A '</div>'
+    A '<div class="sub" style="margin-top:-6px">Click any box to filter the list. Click <b>User accounts</b> to clear it.</div>'
+
+    A '<div class="tblbar">'
+    A '<input type="search" id="qInv" placeholder="Filter by account, name, OU or description...">'
+    A '<select id="fInv"><option value="all">All accounts</option><option value="enabled">Enabled only</option><option value="disabled">Disabled only</option><option value="priv">Privileged only</option><option value="never">Never signed in</option><option value="pne">Password never expires</option></select>'
+    A ("<span class='sub'><b id='cnt-inv'>{0}</b> shown</span>" -f $invRowsAll.Count)
+    A ("<button type='button' id='bInvCsv' class='noprint' data-file='AllUsers-{0}-{1}.csv'>Export this view to CSV</button>" -f `
+        ($Domain -replace '[^\w\.\-]', '_'), (Get-Date -Format 'yyyyMMdd'))
+    A '<button type="button" class="btnPrint noprint">Print this view</button></div>'
+
+    A '<table class="tbl" id="tbl-inv"><tr><th>Account</th><th>Name</th><th>State</th><th>Privileged</th><th>Last logon</th><th>Idle</th><th>Password last set</th><th>Password age</th><th>Expires</th><th>Created</th><th>OU</th><th>Description</th></tr>'
+    foreach ($r in $invRowsAll) {
+        $k = (@($r.Sam, $r.Name, $r.OU, $r.Description, $r.Privileged) -join ' ')
+        $state = if (-not $r.EnabledKnown) { '<span class="mut">Unknown</span>' }
+                 elseif ($r.Enabled) { 'Enabled' }
+                 else { '<span class="badge">Disabled</span>' }
+        $nameCell = (HtmlEnc $r.Name)
+        if ($r.PwdNever) { $nameCell += ' <span class="badge warn">Password never expires</span>' }
+        if ($r.Spns -gt 0) { $nameCell += (' <span class="badge">SPN &times;{0}</span>' -f $r.Spns) }
+        A ("<tr class='invrow' data-k='{0}' data-en='{1}' data-priv='{2}' data-never='{3}' data-pne='{4}'><td class='mono'>{5}</td><td>{6}</td><td>{7}</td><td data-s='{8}'>{9}</td>{10}{11}{12}<td class='days' data-s='{13}'>{14}</td>{15}{16}<td class='mono'>{17}</td><td>{18}</td></tr>" -f `
+            (HtmlEnc $k), `
+            $(if ($r.Enabled) { '1' } else { '0' }), `
+            $(if ($r.Privileged) { '1' } else { '0' }), `
+            $(if ($r.LastLogon) { '0' } else { '1' }), `
+            $(if ($r.PwdNever) { '1' } else { '0' }), `
+            (HtmlEnc $r.Sam), $nameCell, $state, `
+            (HtmlEnc $r.Privileged), (Get-PrivCell $r.Sam), `
+            (Write-WhenCell $r.LastLogon), (Write-DaysCell $r.DaysIdle), (Write-WhenCell $r.PwdLastSet), `
+            $(if ($null -ne $r.PwdAgeDays) { $r.PwdAgeDays } else { 999999 }), `
+            $(if ($null -ne $r.PwdAgeDays) { ('{0} d' -f $r.PwdAgeDays) } else { '&ndash;' }), `
+            (Write-WhenCell $r.Expires), (Write-WhenCell $r.Created), `
+            (HtmlEnc $r.OU), (HtmlEnc $r.Description))
+    }
+    A '</table>'
+}
+A '</section>'
+
 if (-not $SkipCleanup) {
 
     # ---------------------------------------------------- disabled users ---
@@ -2952,7 +3739,11 @@ if (-not $SkipCleanup) {
         A '<div class="sub" style="margin-top:8px">Built-in accounts such as Guest, DefaultAccount and krbtgt are disabled by design and are expected to appear here.</div>'
     }
     A '<div class="tblbar"><input class="tblq" type="search" data-target="#tbl-disabled" data-count="cnt-disabled" placeholder="Filter by name, account, OU or description...">'
-    A ("<span class='sub'><b id='cnt-disabled'>{0}</b> shown</span></div>" -f $cleanup.Disabled.Count)
+    A '<label style="color:var(--mut);display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" class="tblf" data-filter-target="#tbl-disabled" data-attr="priv" data-val="1"> Privileged only</label>'
+    A ("<span class='sub'><b id='cnt-disabled'>{0}</b> shown</span>" -f $cleanup.Disabled.Count)
+    A ("<button type='button' class='btnCsv noprint' data-table='tbl-disabled' data-file='DisabledUsers-{0}-{1}.csv'>Export this view to CSV</button>" -f `
+        ($Domain -replace '[^\w\.\-]', '_'), (Get-Date -Format 'yyyyMMdd'))
+    A '<button type="button" class="btnPrint noprint">Print this view</button></div>'
 
     if ($cleanup.Disabled.Count -eq 0) { A '<div class="sub">No disabled user accounts.</div>' }
     else {
@@ -2965,11 +3756,12 @@ if (-not $SkipCleanup) {
         foreach ($d in $disRows) {
             $k = (@($d.Name, $d.Sam, $d.OU, $d.Description, (Get-PrivCell $d.Sam)) -join ' ')
             $state = if ($d.Enabled -eq $false) { '<span class="badge bad">Disabled</span>' } else { '<span class="badge warn">NOT DISABLED</span>' }
-            A ("<tr class='row' data-k='{0}'><td>{1}</td><td class='mono'>{2}</td><td>{3}</td><td data-s='{4}'>{5}</td>{6}{7}{8}<td class='mono'>{9}</td><td>{10}</td></tr>" -f `
+            A ("<tr class='row' data-k='{0}' data-priv='{11}'><td>{1}</td><td class='mono'>{2}</td><td>{3}</td><td data-s='{4}'>{5}</td>{6}{7}{8}<td class='mono'>{9}</td><td>{10}</td></tr>" -f `
                 (HtmlEnc $k), (HtmlEnc $d.Name), (HtmlEnc $d.Sam), $state,
                 (HtmlEnc ((@($script:PrivMap["$($d.Sam)".ToLower()]) -join ' '))), (Get-PrivCell $d.Sam),
                 (Write-WhenCell $d.LastLogon), (Write-DaysCell $d.DaysIdle),
-                (Write-WhenCell $d.PwdLastSet), (HtmlEnc $d.OU), (HtmlEnc $d.Description))
+                (Write-WhenCell $d.PwdLastSet), (HtmlEnc $d.OU), (HtmlEnc $d.Description),
+                $(if (Test-Privileged $d.Sam) { '1' } else { '0' }))
         }
         A '</table>'
     }
@@ -2984,7 +3776,11 @@ if (-not $SkipCleanup) {
     A ("<div class='sub'>{0} enabled user accounts (out of {1} users in the domain) have not logged on in {2} days. Accounts that never logged on appear once they are older than the same threshold, so new hires are not flagged. Last logon comes from lastLogonTimestamp, which replicates with up to a 14-day lag &ndash; treat the day count as approximate.</div>" -f `
         $cleanup.StaleUsers.Count, $cleanup.TotalUsers, $StaleUserDays)
     A '<div class="tblbar"><input class="tblq" type="search" data-target="#tbl-users" data-count="cnt-users" placeholder="Filter by name, account, OU or description...">'
-    A ("<span class='sub'><b id='cnt-users'>{0}</b> shown</span></div>" -f $cleanup.StaleUsers.Count)
+    A '<label style="color:var(--mut);display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" class="tblf" data-filter-target="#tbl-users" data-attr="priv" data-val="1"> Privileged only</label>'
+    A ("<span class='sub'><b id='cnt-users'>{0}</b> shown</span>" -f $cleanup.StaleUsers.Count)
+    A ("<button type='button' class='btnCsv noprint' data-table='tbl-users' data-file='StaleUsers-{0}-{1}.csv'>Export this view to CSV</button>" -f `
+        ($Domain -replace '[^\w\.\-]', '_'), (Get-Date -Format 'yyyyMMdd'))
+    A '<button type="button" class="btnPrint noprint">Print this view</button></div>'
 
     if ($cleanup.StaleUsers.Count -eq 0) { A '<div class="sub">No stale enabled user accounts.</div>' }
     else {
@@ -2998,11 +3794,12 @@ if (-not $SkipCleanup) {
             $k = (@($d.Name, $d.Sam, $d.OU, $d.Description, (Get-PrivCell $d.Sam)) -join ' ')
             $nm = (HtmlEnc $d.Name)
             if ($d.PwdNever) { $nm += ' <span class="badge warn">Password never expires</span>' }
-            A ("<tr class='row' data-k='{0}'><td>{1}</td><td class='mono'>{2}</td><td data-s='{3}'>{4}</td>{5}{6}{7}{8}<td class='mono'>{9}</td></tr>" -f `
+            A ("<tr class='row' data-k='{0}' data-priv='{10}'><td>{1}</td><td class='mono'>{2}</td><td data-s='{3}'>{4}</td>{5}{6}{7}{8}<td class='mono'>{9}</td></tr>" -f `
                 (HtmlEnc $k), $nm, (HtmlEnc $d.Sam),
                 (HtmlEnc ((@($script:PrivMap["$($d.Sam)".ToLower()]) -join ' '))), (Get-PrivCell $d.Sam),
                 (Write-WhenCell $d.LastLogon), (Write-DaysCell $d.DaysIdle),
-                (Write-WhenCell $d.PwdLastSet), (Write-WhenCell $d.Created), (HtmlEnc $d.OU))
+                (Write-WhenCell $d.PwdLastSet), (Write-WhenCell $d.Created), (HtmlEnc $d.OU),
+                $(if (Test-Privileged $d.Sam) { '1' } else { '0' }))
         }
         A '</table>'
     }
@@ -3017,7 +3814,10 @@ if (-not $SkipCleanup) {
     A ("<div class='sub'>{0} of {1} computer accounts have not checked in for {2} days. A healthy domain member resets its machine password every 30 days, so a stale password date is the stronger signal that the object is abandoned.</div>" -f `
         $cleanup.StaleComputers.Count, $cleanup.TotalComputers, $StaleComputerDays)
     A '<div class="tblbar"><input class="tblq" type="search" data-target="#tbl-computers" data-count="cnt-computers" placeholder="Filter by name, OS, OU or description...">'
-    A ("<span class='sub'><b id='cnt-computers'>{0}</b> shown</span></div>" -f $cleanup.StaleComputers.Count)
+    A ("<span class='sub'><b id='cnt-computers'>{0}</b> shown</span>" -f $cleanup.StaleComputers.Count)
+    A ("<button type='button' class='btnCsv noprint' data-table='tbl-computers' data-file='StaleComputers-{0}-{1}.csv'>Export this view to CSV</button>" -f `
+        ($Domain -replace '[^\w\.\-]', '_'), (Get-Date -Format 'yyyyMMdd'))
+    A '<button type="button" class="btnPrint noprint">Print this view</button></div>'
 
     if ($cleanup.StaleComputers.Count -eq 0) { A '<div class="sub">No stale computer accounts.</div>' }
     else {
@@ -3075,6 +3875,54 @@ if (-not $NoCsv) {
     if ($cleanup.StaleComputers.Count -gt 0) {
         $cleanup.StaleComputers | Select-Object Name, OU, Enabled, OS, LastLogon, DaysIdle, PwdLastSet, Created, Description |
             Export-Csv -Path (Join-Path $reportDir 'Cleanup-StaleComputers.csv') -NoTypeInformation -Encoding UTF8
+    }
+    if (@($privGroups | Where-Object { -not $_.Error }).Count -gt 0) {
+        $pgRows = @()
+        foreach ($pg in $privGroups) {
+            if ($pg.Error) { continue }
+            foreach ($m in @($pg.Members)) {
+                $pgRows += [pscustomobject]@{
+                    Group = $pg.Label; Member = $m.Name; Account = $m.Sam
+                    Membership = $(if ($m.Direct) { 'Direct' } else { 'Nested' })
+                    AccountState = $(if ($m.Enabled -eq $false) { 'Disabled' } elseif ($m.Enabled -eq $true) { 'Enabled' } else { 'Unknown' })
+                    PasswordNeverExpires = $(if ($m.PwdNeverExpires -eq $true) { 'Yes' } else { 'No' })
+                    PasswordLastSet = $(if ($null -ne $m.PwdLastSet) { ('{0:yyyy-MM-dd}' -f $m.PwdLastSet) } else { 'Never' })
+                    LastLogon = $(if ($null -ne $m.LastLogon) { ('{0:yyyy-MM-dd}' -f $m.LastLogon) } else { 'Never' })
+                }
+            }
+        }
+        if ($pgRows.Count -gt 0) {
+            $pgRows | Export-Csv -Path (Join-Path $reportDir 'PrivilegedGroups.csv') -NoTypeInformation -Encoding UTF8
+        }
+    }
+    if ($userInv.Checked -and @($userInv.Rows).Count -gt 0) {
+        $userInv.Rows |
+            Select-Object @{ n = 'Account'; e = { $_.Sam } }, Name,
+                @{ n = 'AccountState';          e = { $(if (-not $_.EnabledKnown) { 'Unknown' } elseif ($_.Enabled) { 'Enabled' } else { 'Disabled' }) } },
+                @{ n = 'PrivilegedGroups';      e = { $_.Privileged } },
+                @{ n = 'LastLogon';             e = { $(if ($_.LastLogon) { ([datetime]$_.LastLogon).ToString('yyyy-MM-dd') } else { 'Never' }) } },
+                @{ n = 'DaysIdle';              e = { $_.DaysIdle } },
+                @{ n = 'PasswordLastSet';       e = { $(if ($_.PwdLastSet) { ([datetime]$_.PwdLastSet).ToString('yyyy-MM-dd') } else { 'Never' }) } },
+                @{ n = 'PasswordAgeDays';       e = { $_.PwdAgeDays } },
+                @{ n = 'PasswordNeverExpires';  e = { $_.PwdNever } },
+                @{ n = 'AccountExpires';        e = { $(if ($_.Expires) { ([datetime]$_.Expires).ToString('yyyy-MM-dd') } else { '' }) } },
+                @{ n = 'Created';               e = { $(if ($_.Created) { ([datetime]$_.Created).ToString('yyyy-MM-dd') } else { '' }) } },
+                @{ n = 'ServicePrincipalNames'; e = { $_.Spns } },
+                OU, Description |
+            Export-Csv -Path (Join-Path $reportDir 'AllUsers.csv') -NoTypeInformation -Encoding UTF8
+    }
+    if ($svcReview.Checked -and @($svcReview.Accounts).Count -gt 0) {
+        $svcReview.Accounts |
+            Select-Object @{ n = 'Account'; e = { $_.Sam } }, Name,
+                @{ n = 'Type';                  e = { $_.Kind } },
+                @{ n = 'InteractiveLogon';      e = { $_.Status } },
+                @{ n = 'RestrictedBy';          e = { (@($_.RestrictedBy) -join '; ') } },
+                @{ n = 'WhyFlagged';            e = { (@($_.Evidence) -join '; ') } },
+                @{ n = 'ServicePrincipalNames'; e = { (@($_.Spns) -join '; ') } },
+                @{ n = 'PrivilegedGroups';      e = { $_.Privileged } },
+                @{ n = 'PasswordAgeDays';       e = { $_.PwdAgeDays } },
+                Enabled, OU, Description |
+            Export-Csv -Path (Join-Path $reportDir 'ServiceAccounts.csv') -NoTypeInformation -Encoding UTF8
     }
 }
 
@@ -3596,6 +4444,32 @@ if (-not $SkipCommitteeReport) {
         }
     }
 
+    if ($svcReview.Checked) {
+        $svcUn = @($svcReview.Accounts | Where-Object { $_.Status -eq 'Not restricted' -and $_.Enabled })
+        if ($svcUn.Count -gt 0) {
+            $svcPriv = @($svcUn | Where-Object { $_.Privileged })
+            $sev = $(if ($svcPriv.Count -gt 0) { 'High' } else { 'Medium' })
+            $det = ('These accounts show the characteristics of a service account but nothing prevents them being used to sign in at a console or over Remote Desktop.')
+            if ($svcPriv.Count -gt 0) {
+                $det += (' {0} of them also hold privileged group membership: {1}.' -f $svcPriv.Count, ((($svcPriv | ForEach-Object { $_.Sam }) -join ', ')))
+            }
+            Add-Finding $sev ("{0} service account(s) are not restricted from interactive logon" -f $svcUn.Count) `
+                $det $script:ControlMap['service'] 'svc-interactive' `
+                (New-ListExhibit -Columns @('Account', 'Name', 'Why it was flagged', 'Privileged', 'Password age', 'Requested action') -Rows @(
+                    $svcUn | ForEach-Object { [pscustomobject]@{ 'Account' = $_.Sam; 'Name' = $_.Name
+                        'Why it was flagged' = ((@($_.Evidence)) -join '; ')
+                        'Privileged' = $(if ($_.Privileged) { $_.Privileged } else { '-' })
+                        'Password age' = $(if ($null -ne $_.PwdAgeDays) { ('{0} days' -f $_.PwdAgeDays) } else { 'Unknown' })
+                        'Requested action' = 'Deny log on locally and through RDS, or convert to a gMSA' } }) `
+                    -Action 'For each account below, either add it to the group that is denied interactive logon, or convert it to a group Managed Service Account. Do not remove "Log on as a service" or "Log on as a batch job".')
+        }
+        if (-not $svcReview.AnyDenyPolicy) {
+            Add-Finding 'Medium' 'No Group Policy denies interactive logon to service or administrative accounts' `
+                'No applying GPO sets "Deny log on locally" or "Deny log on through Remote Desktop Services", so the Windows defaults apply and nothing stops a service or administrative account signing in at a console.' `
+                $script:ControlMap['service'] 'svc-nopolicy'
+        }
+    }
+
     if ($unlinked.Count -gt 0) {
         Add-Finding 'Low' ("{0} Group Policy Object(s) are not linked anywhere" -f $unlinked.Count) `
             'Unlinked GPOs apply to nothing. Confirm they are intentional and remove those that are obsolete.' `
@@ -3777,6 +4651,11 @@ a{color:var(--accent)}
     if ($privGroups.Count -gt 0) {
         $pTotal = 0; foreach ($pg in $privGroups) { $pTotal += @($pg.Members).Count }
         C ("<li>Privileged group membership totals {0} account(s) across Administrators, Domain Admins, Enterprise Admins and Schema Admins.</li>" -f $pTotal)
+    }
+    if ($userInv.Checked) {
+        $invEnC = @($userInv.Rows | Where-Object { $_.Enabled }).Count
+        C ("<li>The domain contains {0} user account(s): {1} enabled and {2} disabled. The complete inventory is in the detailed report and in AllUsers.csv.</li>" -f `
+            @($userInv.Rows).Count, $invEnC, (@($userInv.Rows).Count - $invEnC))
     }
     if ($cleanup.Checked) {
         C ("<li>Directory hygiene: {0} disabled account(s), {1} enabled account(s) unused for {2}+ days, {3} computer(s) not checked in for {4}+ days.</li>" -f `
