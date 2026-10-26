@@ -15,6 +15,7 @@ Active Directory domain.
 | **What it does** | Read-only audit of every GPO, every user, privileged groups, service accounts and logon restrictions |
 | **What you get** | Two self-contained HTML reports + CSV exports you can hand to an auditor |
 | **Change tracking** | Differential tables over a rolling window (default 30 days), not "since last run" |
+| **Version** | **3.15.0** — script last updated 2026-10-15. See [Version history](#version-history). |
 | **License** | Apache 2.0 |
 
 ---
@@ -309,6 +310,40 @@ $Branding = @{
     ShowPoweredBy  = $true
 }
 ```
+
+---
+
+## Version history
+
+The version number is set near the top of the script (`$script:ScriptVersion`), printed in the console
+banner when it runs, and shown in the footer of every report it produces.
+
+| Version | Date | What changed |
+|---|---|---|
+| **3.15.0** | 2026-10-15 | **Current release.** Service account review, complete user inventory, CSV export and print on every view. Details below. |
+| 3.10.0 | 2026-09-29 | Branding block so MSPs can put their own name, logo and colors on the reports. Open items in the committee report gained recommendations, management response boxes and exhibits with copy-to-ticket change requests. The password-filter DLL check was removed. |
+| 3.6.0 | 2026-09-20 | Change tracking rewritten as five differential tables over a fixed `-DriftDays` window instead of "since last run". Added `-SkipUserDrift` and `Drift-Changes.csv`. |
+| 3.3.0 | 2026-09-18 | First public release: focus areas A–F, privileged groups, logon restrictions, GPO inventory, cleanup views and the committee report. |
+
+### New in 3.15.0
+
+- **Service account review.** A new view that collects evidence for which accounts look like service
+  accounts (service principal names, naming convention, non-expiring password, description) and then
+  checks whether any applying GPO denies them interactive logon locally or over Remote Desktop. Managed
+  service accounts (gMSA/sMSA) are tagged as already handled. Edit `$script:ServiceAccountNamePatterns`
+  to match your naming standard. Skip it with the new `-SkipServiceAccounts` switch.
+- **Two new committee findings.** Service accounts that are not restricted from interactive logon
+  (rated High if any also hold privileged group membership), and no GPO denying interactive logon to
+  service or administrative accounts at all. Both carry a recommendation, an exhibit and a change
+  request, and both are mapped to FFIEC IS II.C.7, NIST CSF 2.0 PR.AA, CRI Profile PR.AA and CIS
+  Controls v8 5.1 and 5.4.
+- **All users.** The complete user account inventory auditors request, with search, clickable
+  stat-tile filters and sorting.
+- **Export this view to CSV** and **Print this view** on every view in the detailed report. Export
+  writes what is currently filtered, not the whole table. Print drops the navigation sidebar.
+- **Clickable stat tiles** on *All users* and *User logon restrictions* act as filters.
+- **New CSV exports:** `AllUsers.csv`, `ServiceAccounts.csv` and `PrivilegedGroups.csv`, with safer
+  quoting of fields that contain commas, quotes or line breaks.
 
 ---
 
