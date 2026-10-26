@@ -19,6 +19,23 @@ Active Directory domain.
 
 ---
 
+## Why this exists
+
+Every bank and credit union IT examination asks the same questions about Active Directory. Who has
+administrative access, and did it change since the last review? Is account lockout turned on? How long
+before an idle session locks? Can service accounts log on at a console? Which accounts are stale? Is the
+logon banner actually displayed? Examiners from the FFIEC agencies, the NCUA, state regulators and
+third-party IT auditors ask for this evidence every cycle, and most institutions rebuild it by hand each
+time from GPMC screenshots and ADUC exports.
+
+This script was written to answer those questions in one pass, in the format auditors and examiners
+expect, with the control citations they look for already attached. Run it before the exam and hand the
+detailed review to the auditor. Run it monthly and the IT Committee report drops straight into the
+committee packet, with change tracking and management response boxes ready for the minutes. It saves
+hours every review cycle and gives the committee a consistent document to approve.
+
+---
+
 ## See it before you run it
 
 Two complete sample reports are in [`samples/`](samples/). Every domain, account, computer and GPO in
@@ -295,12 +312,51 @@ $Branding = @{
 
 ---
 
+## Limitations
+
+- Reports **configured** settings only. The GPO XML report does not contain settings left "Not
+  Configured," so absence in this report means absence from Group Policy — not that a setting is unset
+  on the endpoint.
+- `LastLogonDate` derives from `lastLogonTimestamp`, which replicates lazily and can lag by up to 14
+  days. Day counts are approximate by design; the thresholds are deliberately loose because of it.
+- The change report compares **snapshots**, not the security event log. It tells you an account was
+  added to Domain Admins between two dates; it does not tell you who added it or exactly when. Pair it
+  with your SIEM or event-log retention for attribution.
+- Account-level differential tables need a baseline snapshot that also recorded account detail. A
+  baseline written by an older version, or with `-SkipUserDrift`, is reported as *not measured* rather
+  than as *no change*.
+- Logon hours are stored in UTC and rendered in local time. Generating during daylight saving shifts
+  the grid by an hour relative to a schedule authored under standard time. Use `-UtcOffsetHours` to
+  pin it.
+- Focus areas match on setting names and category paths. A control implemented through an unusual
+  custom ADMX or a preference item may not be matched — open an issue with the setting name and it can
+  be added.
+- This tool reports configuration. **It is not an audit, a risk assessment, or a substitute for
+  either.**
+
+---
+
 ## Questions, problems or suggestions
 
 Found a bug, want a control area added, or need it to cite your framework instead?
 
 **Visit [audithat.com](https://audithat.com) and fill out the contact form.** Every suggestion gets
 read. You can also open an issue here on GitHub.
+
+---
+
+## Contributing
+
+Issues and pull requests are welcome, particularly:
+
+- **Unmatched settings.** If a control in your environment is implemented in a way the focus areas do
+  not catch, open an issue with the setting name and container path and it can be added to the matcher.
+- **Control mapping.** Corrections to the FFIEC, NIST CSF 2.0, CRI Profile or CIS Controls v8
+  references, with a citation.
+- **Directory shapes.** Multi-domain forests, unusual OU structures, and non-English domains are where
+  edge cases live.
+
+Please do not attach a real report to an issue. Redact it, or reproduce against a lab domain.
 
 ---
 
