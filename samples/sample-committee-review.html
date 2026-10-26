@@ -1,0 +1,725 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Active Directory &amp; Group Policy Review - Committee Review - corp.examplebank.local</title>
+<style>:root{--ink:#111;--mut:#555;--line:#d4d9df;--accent:#0b5fff;--hi:#b91c1c;--med:#b45309;--low:#3f6212;--ok:#15803d;--chip:#f1f4f8}
+*{box-sizing:border-box}
+body{margin:0;background:#fff;color:var(--ink);font:13.5px/1.55 "Segoe UI",system-ui,-apple-system,sans-serif}
+.page{max-width:980px;margin:0 auto;padding:36px 44px 60px}
+h1{font-size:23px;margin:0 0 2px}
+h2{font-size:15px;margin:30px 0 10px;padding-bottom:5px;border-bottom:2px solid var(--ink);text-transform:uppercase;letter-spacing:.05em}
+h3{font-size:13.5px;margin:18px 0 6px}
+.sub{color:var(--mut);font-size:12.5px}
+table{width:100%;border-collapse:collapse;font-size:12.5px;margin:8px 0 4px}
+th{text-align:left;padding:7px 9px;background:var(--chip);border:1px solid var(--line);font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#333}
+td{padding:7px 9px;border:1px solid var(--line);vertical-align:top}
+.cover{border:2px solid var(--ink);padding:18px 22px;margin-bottom:6px}
+.brandbar{display:flex;align-items:center;gap:10px;margin:0 0 12px;padding-bottom:9px;border-bottom:1px solid var(--line)}
+.brandbar .bm{font-size:15px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;text-decoration:none;color:var(--accent)}
+.brandbar span{font-size:11px;color:var(--mut)}
+.cover .row{display:flex;flex-wrap:wrap;gap:26px;margin-top:12px}
+.cover .f{min-width:180px}
+.cover .f b{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut)}
+.tiles{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}
+.tile{border:1px solid var(--line);border-radius:5px;padding:9px 13px;min-width:112px}
+.tile b{display:block;font-size:19px;line-height:1.2}
+.tile span{font-size:11px;color:var(--mut)}
+.sev{display:inline-block;padding:2px 7px;border-radius:3px;font-size:10.5px;font-weight:700;letter-spacing:.03em;color:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.sev.High{background:var(--hi)} .sev.Medium{background:var(--med)} .sev.Low{background:var(--low)}
+.st{font-weight:700} .st.ok{color:var(--ok)} .st.no{color:var(--hi)}
+ul.sum{margin:6px 0 0;padding-left:20px} ul.sum li{margin:5px 0}
+.chg{margin:0;padding-left:20px} .chg li{margin:5px 0}
+.chg .Better::marker{color:var(--ok)} .chg .Worse::marker{color:var(--hi)}
+.tag{font-weight:700;font-size:11px;letter-spacing:.03em}
+.tag.Better{color:var(--ok)} .tag.Worse{color:var(--hi)} .tag.Neutral{color:var(--mut)}
+.mono{font-family:Consolas,"Courier New",monospace;font-size:11.5px}
+.same{color:var(--ok);font-weight:600}
+.diff{color:var(--hi);font-weight:700}
+.was{color:var(--mut)}
+.now{font-weight:600}
+.chg-Added{color:var(--hi);font-weight:700}
+.chg-Removed{color:var(--ok);font-weight:700}
+.chg-Modified{color:var(--med);font-weight:700}
+.set-Added{color:var(--ok);font-weight:700}
+.set-Removed{color:var(--hi);font-weight:700}
+.set-Modified{color:var(--med);font-weight:700}
+.same-note{background:#f2f9f4;border-left:3px solid var(--ok);padding:9px 12px;font-size:12px;color:#22402c;margin:8px 0}
+.signoff{margin-top:14px;border:1px solid var(--line)}
+.signoff td{height:46px}
+.note{background:var(--chip);border-left:3px solid var(--accent);padding:9px 12px;font-size:12px;color:#333;margin:10px 0}
+footer{margin-top:34px;padding-top:10px;border-top:1px solid var(--line);color:var(--mut);font-size:11px}
+a{color:var(--accent)}
+/* ---- open items: one card each, with room for a written management response */
+.oi{border:1px solid var(--line);border-left:4px solid var(--mut);border-radius:4px;margin:12px 0 16px;break-inside:avoid;page-break-inside:avoid}
+.oi.High{border-left-color:var(--hi)} .oi.Medium{border-left-color:var(--med)} .oi.Low{border-left-color:var(--low)}
+.oi-head{display:flex;align-items:center;gap:9px;padding:9px 12px;background:var(--chip);border-bottom:1px solid var(--line);-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.oi-num{font:700 11.5px/1 Consolas,"Courier New",monospace;color:var(--mut);min-width:36px}
+.oi-title{font-weight:700;font-size:13.5px}
+.oi-body{display:flex;gap:18px;padding:10px 12px 4px}
+.oi-detail{flex:1 1 60%}
+.oi-ref{flex:0 0 34%;font-size:11.5px;color:var(--mut)}
+.oi-ref b{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}
+.oi-rec{margin:8px 12px 2px;padding:8px 11px;border-left:3px solid var(--accent);background:var(--chip);font-size:12.5px;line-height:1.5;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.oi-rec .oi-lbl{margin:0 0 2px;color:var(--accent)}
+.oi-resp{padding:6px 12px 12px}
+.oi-exref{margin-top:5px;font-size:12px;font-weight:600}
+.oi-exref a{color:var(--accent);text-decoration:none}
+
+/* ---- exhibits at the back of the report */
+.exhibits{break-before:page;page-break-before:always}
+.ex{border:1px solid var(--line);border-radius:4px;margin:14px 0 20px;padding:0 0 12px}
+.ex-head{display:flex;align-items:center;gap:9px;padding:9px 12px;background:var(--chip);border-bottom:1px solid var(--line);margin-bottom:10px;break-after:avoid;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.ex-num{font-weight:800;font-size:12.5px;letter-spacing:.02em;color:var(--accent);white-space:nowrap}
+.ex-title{font-weight:700;font-size:13.5px}
+.ex > .sub, .ex > .oi-lbl, .ex > .ex-wording, .ex > .ex-ticket{margin-left:12px;margin-right:12px}
+.ex-tbl{width:calc(100% - 24px);margin:6px 12px 4px;font-size:12px}
+.ex-tbl th{font-size:10px}
+.ex-tbl tr{break-inside:avoid;page-break-inside:avoid}
+.ex-tbl td{padding:6px 8px}
+.ex-miss{color:var(--hi);font-weight:600}
+.ex-rec{font-weight:600}
+.ex-path{font-size:11px;color:var(--mut)}
+.ex-wording{border:1px solid var(--line);border-radius:3px;padding:10px 12px;font-size:12px;line-height:1.5;background:#fff}
+.ex-ticket{position:relative;border:1px dashed #9aa4af;border-radius:3px;background:#fbfcfd}
+.ex-tlbl{break-after:avoid;page-break-after:avoid}
+.ex-where{margin:0 12px 6px;font-size:11.5px;color:var(--mut)}
+.ex-where b{color:var(--ink);font-weight:600}
+.ex-ticket pre{margin:0;padding:10px 12px;font:11.5px/1.5 Consolas,"Courier New",monospace;white-space:pre-wrap;word-break:break-word}
+.ex-copy{position:absolute;top:6px;right:6px;font:600 11px/1 "Segoe UI",sans-serif;padding:5px 10px;border:1px solid var(--line);border-radius:4px;background:#fff;color:var(--accent);cursor:pointer}
+.ex-copy:hover{border-color:var(--accent)}
+.oi-lbl{display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);margin:6px 0 3px}
+/* ruled writing area: 6 lines at 28px, and typed text sits on the same lines */
+.oi-write{min-height:168px;padding:0 6px;font-size:13px;line-height:28px;border:1px solid var(--line);border-radius:3px;
+  background:repeating-linear-gradient(to bottom,transparent 0,transparent 27px,#c9d0d8 27px,#c9d0d8 28px);
+  -webkit-print-color-adjust:exact;print-color-adjust:exact;outline:none;white-space:pre-wrap}
+.oi-write:focus{border-color:var(--accent)}
+.oi-meta{display:flex;flex-wrap:wrap;gap:8px 22px;margin-top:6px;align-items:flex-end}
+.oi-f{flex:1 1 150px}
+.oi-f.oi-status{flex:2 1 320px}
+.oi-line{border-bottom:1px solid #9aa4af;min-height:26px;line-height:26px;font-size:13px;outline:none;padding:0 3px}
+.oi-boxes{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12.5px;padding-top:4px}
+@media print{
+  body{font-size:11pt}
+  .page{max-width:none;padding:0}
+  h2{page-break-after:avoid}
+  table,.cover,.signoff{page-break-inside:avoid}
+  .oi{break-inside:avoid;page-break-inside:avoid}
+  .oi-write{border-color:#9aa4af}
+  .noprint{display:none}
+}</style></head><body><div class="page">
+<div class="cover">
+<div class='brandbar'><a class='bm' href='https://audithat.com' target='_blank' rel='noopener'>AuditHat</a><span>Baseline and drift reporting for financial institutions</span></div>
+<h1>Active Directory &amp; Group Policy Review</h1>
+<div class='sub'>Prepared for IT Committee / IT Steering Committee review</div>
+<div class="row">
+<div class='f'><b>Domain</b>corp.examplebank.local</div>
+<div class='f'><b>Review date</b>October 24, 2026</div>
+<div class='f'><b>Prepared by</b>CORP\adm.jmoran</div>
+<div class='f'><b>Collected from</b>DC01</div>
+<div class='f'><b>Period covered</b>September 22, 2026 to October 24, 2026 (32 days)</div>
+<div class='f'><b>Source</b>Export-ADAuditReport.ps1 v3.15.0</div>
+</div></div>
+<div class='note' style='margin:0 0 14px'><b>Sample report.</b> Every domain name, account, computer, organizational unit and Group Policy Object below is fictional and was invented for this example. It is published so you can see the shape of the output before running the script against your own domain.</div>
+<h2>Executive summary</h2>
+<div class="tiles">
+<div class='tile'><b>8</b><span>Group Policy Objects</span></div>
+<div class='tile'><b>25</b><span>Configured settings</span></div>
+<div class='tile'><b style='color:var(--hi)'>3</b><span>High findings</span></div>
+<div class='tile'><b style='color:var(--med)'>4</b><span>Medium findings</span></div>
+<div class='tile'><b style='color:var(--low)'>2</b><span>Low findings</span></div>
+</div>
+<ul class="sum">
+<li>4 of 6 reviewed control areas are configured by a Group Policy Object that is actively applying.</li>
+<li>Privileged group membership totals 9 account(s) across Administrators, Domain Admins, Enterprise Admins and Schema Admins.</li>
+<li>The domain contains 61 user account(s): 51 enabled and 10 disabled. The complete inventory is in the detailed report and in AllUsers.csv.</li>
+<li>Directory hygiene: 10 disabled account(s), 12 enabled account(s) unused for 90+ days, 4 computer(s) not checked in for 90+ days.</li>
+<li>10 user account(s) carry a logon-hour, workstation or account-expiry restriction.</li>
+<li><b>7 item(s) require management attention</b>, detailed under Open Items below.</li>
+</ul>
+<h2>Change over the last 32 days</h2>
+<div class='sub'>Review window: <b>at least 30 days</b>. Compared against the recorded state of <b>September 22, 2026</b>, 32 day(s) ago &ndash; the most recent baseline that is at least 30 days old. Every item below either changed inside that window, or is confirmed unchanged.</div>
+<div class="tiles">
+<div class='tile'><b>11</b><span>Total changes</span></div>
+<div class='tile'><b>2</b><span>Control areas changed</span></div>
+<div class='tile'><b>3</b><span>Setting changes</span></div>
+<div class='tile'><b style='color:var(--hi)'>2</b><span>Privileged changes</span></div>
+<div class='tile'><b>4</b><span>User changes</span></div>
+<div class='tile'><b>2</b><span>Computer changes</span></div>
+</div>
+<h3>Headlines</h3><ul class="chg">
+<li class='Worse'><span class='tag Worse'>WORSE</span> &nbsp;Removable storage restrictions no longer apply - the only link on CORP - Removable Media (TEST) was disabled.</li>
+<li class='Worse'><span class='tag Worse'>WORSE</span> &nbsp;1 account was added to Domain Admins (adm.ktate).</li>
+<li class='Better'><span class='tag Better'>BETTER</span> &nbsp;Minimum password length increased from 8 to 12 characters.</li>
+<li class='Better'><span class='tag Better'>BETTER</span> &nbsp;Credential validation auditing was enabled on servers.</li>
+<li class='Neutral'><span class='tag Neutral'>NEUTRAL</span> &nbsp;1 user account was created and 1 was disabled.</li>
+</ul>
+<h3>1. Control areas &mdash; changed or unchanged</h3>
+<table><tr><th style='width:27%'>Control area</th><th style='width:24%'>As of Sep 22, 2026</th><th style='width:24%'>Today</th><th style='width:25%'>Result</th></tr>
+<tr><td><b>A.</b> Password policy - users and administrators</td><td>Configured - 1 GPO</td><td>Configured - 1 GPO</td><td class='same'>No change</td></tr>
+<tr><td><b>B.</b> Account lockout</td><td>Configured - 1 GPO</td><td>Configured - 1 GPO</td><td class='same'>No change</td></tr>
+<tr><td><b>C.</b> Audit policy and event logs</td><td>Configured - 1 GPO</td><td>Configured - 2 GPOs</td><td class='diff'>GPO coverage changed</td></tr>
+<tr><td><b>D.</b> Inactivity - screen lock and idle sessions</td><td>Not configured</td><td>Not configured</td><td class='same'>No change</td></tr>
+<tr><td><b>E.</b> USB and removable storage restrictions</td><td>Configured - 1 GPO</td><td>Not configured</td><td class='diff'>No longer configured</td></tr>
+<tr><td><b>F.</b> Logon banner - legal notice</td><td>Partially configured</td><td>Partially configured</td><td class='same'>No change</td></tr>
+</table>
+<div class='sub'>2 of 6 control areas changed in this window; <b>4 are unchanged</b>.</div>
+<h3>2. Group Policy setting changes</h3>
+<table><tr><th style="width:13%">Area</th><th style="width:22%">Setting</th><th style="width:10%">Change</th><th style="width:20%">Was</th><th style="width:20%">Now</th><th style="width:15%">GPO</th></tr>
+<tr><td>Password policy - users and administrators</td><td>Minimum password length</td><td class='set-Modified'>Modified</td><td class='was'>8 characters</td><td class='now'>12 characters</td><td class='sub'>Default Domain Policy</td></tr>
+<tr><td>Audit policy and event logs</td><td>Audit Credential Validation</td><td class='set-Added'>Added</td><td class='was'>Not configured</td><td class='now'>Success and Failure</td><td class='sub'>CORP - Audit Policy (Servers)</td></tr>
+<tr><td>USB and removable storage restrictions</td><td>All Removable Storage classes: Deny all access</td><td class='set-Removed'>Removed</td><td class='was'>Enabled (applying)</td><td class='now'>Not applying - link disabled</td><td class='sub'>CORP - Removable Media (TEST)</td></tr>
+</table>
+<h3>3. Privileged group membership changes</h3>
+<table><tr><th style="width:28%">Group</th><th style="width:24%">Account</th><th style="width:20%">Change</th><th style="width:14%">Was</th><th style="width:14%">Now</th></tr>
+<tr><td>Domain Admins</td><td class='mono'>adm.ktate</td><td class='chg-Added'>Added to group</td><td class='was'></td><td class='now'>Member</td></tr>
+<tr><td>Administrators</td><td class='mono'>svc.temp</td><td class='chg-Removed'>Removed from group</td><td class='was'>Member</td><td class='now'></td></tr>
+</table>
+<div class="sub">Every addition to a privileged group should have an approved change record behind it.</div>
+<h3>4. User account changes</h3>
+<table><tr><th style="width:17%">Account</th><th style="width:19%">Name</th><th style="width:22%">Change</th><th style="width:21%">Was</th><th style="width:21%">Now</th></tr>
+<tr><td class='mono'>tauditor</td><td>Temp Auditor</td><td class='chg-Added'>Created</td><td class='was'></td><td class='now'>Enabled</td></tr>
+<tr><td class='mono'>svc.oldpayroll</td><td>Retired Payroll Service</td><td class='chg-Modified'>Disabled</td><td class='was'>Enabled</td><td class='now'>Disabled</td></tr>
+<tr><td class='mono'>mnovak</td><td>Marco Novak</td><td class='chg-Modified'>Moved OU</td><td class='was'>OU=Branch Staff</td><td class='now'>OU=Lending</td></tr>
+<tr><td class='mono'>adm.vendor</td><td>Core Vendor Support</td><td class='chg-Modified'>Account expiry set</td><td class='was'>None</td><td class='now'>2026-12-13</td></tr>
+</table>
+<h3>5. Computer account changes</h3>
+<table><tr><th style="width:22%">Computer</th><th style="width:22%">Change</th><th style="width:19%">Was</th><th style="width:19%">Now</th><th style="width:18%">Organizational unit</th></tr>
+<tr><td class='mono'>TLR-WEST-01</td><td class='chg-Added'>Joined domain</td><td class='was'></td><td class='now'>Enabled</td><td class='sub'>OU=Branch</td></tr>
+<tr><td class='mono'>OLD-TLR-04</td><td class='chg-Modified'>Disabled</td><td class='was'>Enabled</td><td class='now'>Disabled</td><td class='sub'>OU=Retired</td></tr>
+</table>
+<h2>Control review and mapping</h2>
+<table><tr><th style="width:22%">Control area</th><th style="width:9%">Status</th><th style="width:27%">Configured by</th><th style="width:42%">Reference</th></tr>
+<tr><td><b>A.</b> Password policy - users and administrators</td><td><span class="st ok">Configured</span></td><td>Default Domain Policy</td><td>Create a password policy in a GPO linked at the domain root: minimum length of at least 14 characters, complexity enabled, a password history of 24, and a maximum age that matches the institution</td></tr>
+<tr><td><b>B.</b> Account lockout</td><td><span class="st ok">Configured</span></td><td>Default Domain Policy</td><td>FFIEC IS II.C.7 User Security Controls<br>NIST CSF 2.0 PR.AA<br>CRI Profile PR.AA<br>CIS Controls v8 6.3; CIS Benchmark - Account Lockout Policy</td></tr>
+<tr><td><b>C.</b> Audit policy and event logs</td><td><span class="st ok">Configured</span></td><td>Default Domain Controllers Policy; CORP - Audit Policy (Servers)</td><td>FFIEC IS II.C Risk Mitigation (logging and monitoring); Audit booklet<br>NIST CSF 2.0 DE.CM, PR.PS<br>CRI Profile DE.CM, PR.PS<br>CIS Controls v8 8.2, 8.5, 8.11</td></tr>
+<tr><td><b>D.</b> Inactivity - screen lock and idle sessions</td><td><span class="st no">Not configured</span></td><td><span class="sub">No applying GPO</span></td><td>FFIEC IS II.C.7 User Security Controls; II.C.15 Logical Security<br>NIST CSF 2.0 PR.AA<br>CRI Profile PR.AA, PR.PS<br>CIS Controls v8 4.3</td></tr>
+<tr><td><b>E.</b> USB and removable storage restrictions</td><td><span class="st no">Not configured</span></td><td><span class="sub">No applying GPO</span></td><td>FFIEC IS II.C.13 Control of Information<br>NIST CSF 2.0 PR.DS, PR.PS<br>CRI Profile PR.DS, PR.PS<br>CIS Controls v8 3.6, 10.3</td></tr>
+<tr><td><b>F.</b> Logon banner - legal notice</td><td><span class="st ok">Configured</span></td><td>Default Domain Policy</td><td>FFIEC IS II.C.15 Logical Security<br>NIST CSF 2.0 PR.AT, GV.PO<br>CRI Profile PR.AT, PR.PS<br>CIS Controls v8 4.1; CIS Benchmark - Interactive logon message</td></tr>
+<tr><td><b>G.</b> Privileged group membership</td><td><span class='st ok'>Reviewed</span></td><td>Administrators, Domain Admins, Enterprise Admins, Schema Admins</td><td>FFIEC IS II.C.7 User Security Controls (least privilege, access rights administration)<br>NIST CSF 2.0 PR.AA<br>CRI Profile PR.AA<br>CIS Controls v8 5.4, 6.8</td></tr>
+<tr><td><b>H.</b> Account provisioning and dormancy</td><td><span class='st ok'>Reviewed</span></td><td>Thresholds: users 90 days, computers 90 days</td><td>FFIEC IS II.C.7 User Security Controls (provisioning and deprovisioning)<br>NIST CSF 2.0 PR.AA, ID.AM<br>CRI Profile PR.AA, ID.AM<br>CIS Controls v8 5.1, 5.3</td></tr>
+<tr><td><b>I.</b> User logon restrictions</td><td><span class='st ok'>Reviewed</span></td><td>logonHours, logonWorkstations, account expiry</td><td>FFIEC IS II.C.7 User Security Controls; II.C.15 Logical Security<br>NIST CSF 2.0 PR.AA<br>CRI Profile PR.AA<br>CIS Controls v8 6.1, 6.2</td></tr>
+</table>
+<div class="note"><b>On the references:</b> FFIEC citations are to the current IT Examination Handbook booklets. NIST CSF 2.0 gives the Function and Category. CRI Profile references are to the Cyber Risk Institute Profile v2.x at the <i>Category</i> level; the Profile identifies individual requirements as diagnostic statements in the form <span class="mono">FUNCTION.CATEGORY-##.##</span>, so if your institution reports against specific diagnostic statements, add those numbers from your licensed Profile workbook. CIS Controls v8 safeguards are included for institutions whose hardening standard is the Center for Internet Security Benchmarks. These are the default mappings shipped with the script and are a starting point &ndash; confirm them against your institution&rsquo;s own control set and your examiner&rsquo;s expectations. They are defined in one place at the top of the script ($script:ControlMap) and can be edited to match your house citations. Framework names are used for mapping and identification only; no endorsement, certification or affiliation is implied.</div>
+<h2>Open items</h2>
+<div class='sub'>9 item(s), highest severity first. Each has space for management&rsquo;s response &ndash; write it in on the printed copy, or click into the box and type before printing or saving. Item numbers are stable within this report so the committee minutes can refer to them.</div>
+<div class='oi High'>
+<div class='oi-head'><span class='oi-num'>OI-1</span><span class='sev High'>High</span><span class='oi-title'>Account lockout is disabled</span></div>
+<div class="oi-body">
+<div class='oi-detail'>The account lockout threshold in Default Domain Policy is set to 0, which disables lockout entirely. An attacker can guess passwords against any account indefinitely without the account ever locking.</div>
+<div class='oi-ref'><b>Reference</b>FFIEC IS II.C.7 User Security Controls<br>NIST CSF 2.0 PR.AA<br>CRI Profile PR.AA<br>CIS Controls v8 6.3; CIS Benchmark - Account Lockout Policy</div>
+</div>
+<div class='oi-rec'><span class='oi-lbl'>Recommendation</span>Create a lockout policy that locks the account after 5 invalid attempts for 60 minutes, with the failed-attempt counter resetting after 15 minutes. During that hour only an administrator can unlock it, so unlock requests go through the help desk and are ticketed. If every lockout must be released by an administrator, set the duration to 0 (locked until unlocked). A threshold of 0 - the current setting - means an attacker can guess passwords indefinitely.<div class='oi-exref'>&#8594; <a href='#ex-1'>See Exhibit OI-1</a> &ndash; current and recommended settings, with a ready-to-use change request.</div></div>
+<div class="oi-resp">
+<div class="oi-lbl">Management response / action</div>
+<div class='oi-write' contenteditable='true' spellcheck='true' aria-label='Management response for OI-1'></div>
+<div class="oi-meta">
+<div class="oi-f"><span class="oi-lbl">Owner</span><div class="oi-line" contenteditable="true"></div></div>
+<div class="oi-f"><span class="oi-lbl">Target date</span><div class="oi-line" contenteditable="true"></div></div>
+<div class="oi-f oi-status"><span class="oi-lbl">Status</span><span class="oi-boxes"><span>&#9744; Open</span><span>&#9744; In progress</span><span>&#9744; Risk accepted</span><span>&#9744; Closed</span></span></div>
+</div></div></div>
+<div class='oi High'>
+<div class='oi-head'><span class='oi-num'>OI-2</span><span class='sev High'>High</span><span class='oi-title'>Service accounts are not restricted from interactive logon</span></div>
+<div class="oi-body">
+<div class='oi-detail'>Three enabled accounts that look like service accounts are not denied &quot;Log on locally&quot; or &quot;Log on through Remote Desktop Services&quot; by any applying Group Policy Object, and no GPO in this domain sets either right, so the Windows defaults apply. One of them is a member of the built-in Administrators group.</div>
+<div class='oi-ref'><b>Reference</b>FFIEC IS II.C.7 User Security Controls (authentication, least privilege)<br>NIST CSF 2.0 PR.AA<br>CRI Profile PR.AA<br>CIS Controls v8 5.1, 5.4</div>
+</div>
+<div class='oi-rec'><span class='oi-lbl'>Recommendation</span>Restrict these accounts, or convert them to managed service accounts. To restrict: put the service accounts in a security group and add that group to &quot;Deny log on locally&quot; and &quot;Deny log on through Remote Desktop Services&quot; in a GPO linked where they could otherwise sign in - leaving &quot;Log on as a service&quot; and &quot;Log on as a batch job&quot; in place, because services and scheduled tasks need those and removing them stops the application. To convert: a group Managed Service Account (gMSA) has its password owned by Active Directory, which generates it at 240 random characters and ROTATES IT AUTOMATICALLY every 30 days by default, releasing it only to the hosts you authorise. Nobody ever knows the password, it cannot be typed at a logon prompt, and it never needs manual rotation - which also removes the password-never-expires exception. The domain needs a KDS root key and the application must support gMSA (SQL Server, IIS application pools and scheduled tasks do; many third-party applications do not). Where neither is possible, document the exception and rotate the password on a defined schedule. Create a GPO that denies interactive logon to service and administrative accounts: add the relevant security groups to &quot;Deny log on locally&quot; and &quot;Deny log on through Remote Desktop Services&quot;, linked to the workstation and server OUs. Without it the Windows defaults apply and any enabled account can sign in at a console wherever it has access.<div class='oi-exref'>&#8594; <a href='#ex-2'>See Exhibit OI-2</a> &ndash; the list of 3 item(s) to action, with a ready-to-use change request.</div></div>
+<div class="oi-resp">
+<div class="oi-lbl">Management response / action</div>
+<div class='oi-write' contenteditable='true' spellcheck='true' aria-label='Management response for OI-2'></div>
+<div class="oi-meta">
+<div class="oi-f"><span class="oi-lbl">Owner</span><div class="oi-line" contenteditable="true"></div></div>
+<div class="oi-f"><span class="oi-lbl">Target date</span><div class="oi-line" contenteditable="true"></div></div>
+<div class="oi-f oi-status"><span class="oi-lbl">Status</span><span class="oi-boxes"><span>&#9744; Open</span><span>&#9744; In progress</span><span>&#9744; Risk accepted</span><span>&#9744; Closed</span></span></div>
+</div></div></div>
+<div class='oi High'>
+<div class='oi-head'><span class='oi-num'>OI-3</span><span class='sev High'>High</span><span class='oi-title'>No applying GPO configures inactivity lock or idle session limits</span></div>
+<div class="oi-body">
+<div class='oi-detail'>No Group Policy Object that is actually applying sets a machine inactivity limit, a password-protected screen saver timeout, or a Remote Desktop idle session limit. An unattended workstation stays signed in indefinitely.</div>
+<div class='oi-ref'><b>Reference</b>FFIEC IS II.C.7 User Security Controls; II.C.15 Logical Security<br>NIST CSF 2.0 PR.AA<br>CRI Profile PR.AA, PR.PS<br>CIS Controls v8 4.3</div>
+</div>
+<div class='oi-rec'><span class='oi-lbl'>Recommendation</span>Implement a policy that automatically locks a workstation after 15 to 30 minutes of inactivity: set &quot;Interactive logon: Machine inactivity limit&quot; to 900-1800 seconds and require a password on resume from the screen saver. Apply matching idle-session limits to Remote Desktop sessions.<div class='oi-exref'>&#8594; <a href='#ex-3'>See Exhibit OI-3</a> &ndash; current and recommended settings, with a ready-to-use change request.</div></div>
+<div class="oi-resp">
+<div class="oi-lbl">Management response / action</div>
+<div class='oi-write' contenteditable='true' spellcheck='true' aria-label='Management response for OI-3'></div>
+<div class="oi-meta">
+<div class="oi-f"><span class="oi-lbl">Owner</span><div class="oi-line" contenteditable="true"></div></div>
+<div class="oi-f"><span class="oi-lbl">Target date</span><div class="oi-line" contenteditable="true"></div></div>
+<div class="oi-f oi-status"><span class="oi-lbl">Status</span><span class="oi-boxes"><span>&#9744; Open</span><span>&#9744; In progress</span><span>&#9744; Risk accepted</span><span>&#9744; Closed</span></span></div>
+</div></div></div>
+<div class='oi Medium'>
+<div class='oi-head'><span class='oi-num'>OI-4</span><span class='sev Medium'>Medium</span><span class='oi-title'>Logon banner is only half configured</span></div>
+<div class="oi-body">
+<div class='oi-detail'>Default Domain Policy sets the banner title but no applying GPO sets the message text (CORP - Logon Banner holds the text but is not linked). Windows displays no banner at all unless both values are configured.</div>
+<div class='oi-ref'><b>Reference</b>FFIEC IS II.C.15 Logical Security<br>NIST CSF 2.0 PR.AT, GV.PO<br>CRI Profile PR.AT, PR.PS<br>CIS Controls v8 4.1; CIS Benchmark - Interactive logon message</div>
+</div>
+<div class='oi-rec'><span class='oi-lbl'>Recommendation</span>Set the missing value. Windows only displays the banner when both the message title and the message text are configured.<div class='oi-exref'>&#8594; <a href='#ex-4'>See Exhibit OI-4</a> &ndash; current and recommended settings, with a ready-to-use change request.</div></div>
+<div class="oi-resp">
+<div class="oi-lbl">Management response / action</div>
+<div class='oi-write' contenteditable='true' spellcheck='true' aria-label='Management response for OI-4'></div>
+<div class="oi-meta">
+<div class="oi-f"><span class="oi-lbl">Owner</span><div class="oi-line" contenteditable="true"></div></div>
+<div class="oi-f"><span class="oi-lbl">Target date</span><div class="oi-line" contenteditable="true"></div></div>
+<div class="oi-f oi-status"><span class="oi-lbl">Status</span><span class="oi-boxes"><span>&#9744; Open</span><span>&#9744; In progress</span><span>&#9744; Risk accepted</span><span>&#9744; Closed</span></span></div>
+</div></div></div>
+<div class='oi Medium'>
+<div class='oi-head'><span class='oi-num'>OI-5</span><span class='sev Medium'>Medium</span><span class='oi-title'>A disabled account is still a member of a privileged group</span></div>
+<div class="oi-body">
+<div class='oi-detail'>adm.legacy is disabled but remains a member of Domain Admins. Disabling an account does not remove its group memberships, and re-enabling it restores full privilege.</div>
+<div class='oi-ref'><b>Reference</b>FFIEC IS II.C.7 User Security Controls (least privilege, access rights administration)<br>NIST CSF 2.0 PR.AA<br>CRI Profile PR.AA<br>CIS Controls v8 5.4, 6.8</div>
+</div>
+<div class='oi-rec'><span class='oi-lbl'>Recommendation</span>Review the administrative accounts. Remove every disabled account from Domain Admins, Enterprise Admins, Schema Admins and Administrators, and make removal from privileged groups a step in the deprovisioning checklist.<div class='oi-exref'>&#8594; <a href='#ex-5'>See Exhibit OI-5</a> &ndash; the list of 1 item(s) to action, with a ready-to-use change request.</div></div>
+<div class="oi-resp">
+<div class="oi-lbl">Management response / action</div>
+<div class='oi-write' contenteditable='true' spellcheck='true' aria-label='Management response for OI-5'></div>
+<div class="oi-meta">
+<div class="oi-f"><span class="oi-lbl">Owner</span><div class="oi-line" contenteditable="true"></div></div>
+<div class="oi-f"><span class="oi-lbl">Target date</span><div class="oi-line" contenteditable="true"></div></div>
+<div class="oi-f oi-status"><span class="oi-lbl">Status</span><span class="oi-boxes"><span>&#9744; Open</span><span>&#9744; In progress</span><span>&#9744; Risk accepted</span><span>&#9744; Closed</span></span></div>
+</div></div></div>
+<div class='oi Medium'>
+<div class='oi-head'><span class='oi-num'>OI-6</span><span class='sev Medium'>Medium</span><span class='oi-title'>Privileged accounts have non-expiring passwords</span></div>
+<div class="oi-body">
+<div class='oi-detail'>Two accounts in the built-in Administrators group are set to &quot;Password never expires&quot;. One of them has not had its password changed in 812 days.</div>
+<div class='oi-ref'><b>Reference</b>FFIEC IS II.C.7 User Security Controls (least privilege, access rights administration)<br>NIST CSF 2.0 PR.AA<br>CRI Profile PR.AA<br>CIS Controls v8 5.4, 6.8</div>
+</div>
+<div class='oi-rec'><span class='oi-lbl'>Recommendation</span>Review the administrative accounts. Remove &quot;Password never expires&quot; from interactive admin accounts. Move service accounts to group Managed Service Accounts (gMSA) where the application supports it; where it does not, document the exception and rotate the password on a defined schedule.<div class='oi-exref'>&#8594; <a href='#ex-6'>See Exhibit OI-6</a> &ndash; the list of 2 item(s) to action, with a ready-to-use change request.</div></div>
+<div class="oi-resp">
+<div class="oi-lbl">Management response / action</div>
+<div class='oi-write' contenteditable='true' spellcheck='true' aria-label='Management response for OI-6'></div>
+<div class="oi-meta">
+<div class="oi-f"><span class="oi-lbl">Owner</span><div class="oi-line" contenteditable="true"></div></div>
+<div class="oi-f"><span class="oi-lbl">Target date</span><div class="oi-line" contenteditable="true"></div></div>
+<div class="oi-f oi-status"><span class="oi-lbl">Status</span><span class="oi-boxes"><span>&#9744; Open</span><span>&#9744; In progress</span><span>&#9744; Risk accepted</span><span>&#9744; Closed</span></span></div>
+</div></div></div>
+<div class='oi Medium'>
+<div class='oi-head'><span class='oi-num'>OI-7</span><span class='sev Medium'>Medium</span><span class='oi-title'>Removable storage policy is configured but not applying</span></div>
+<div class="oi-body">
+<div class='oi-detail'>CORP - Removable Media (TEST) denies all access to removable storage classes, but its only link is disabled, so no computer receives the setting. No other applying GPO restricts removable media.</div>
+<div class='oi-ref'><b>Reference</b>FFIEC IS II.C.13 Control of Information<br>NIST CSF 2.0 PR.DS, PR.PS<br>CRI Profile PR.DS, PR.PS<br>CIS Controls v8 3.6, 10.3</div>
+</div>
+<div class='oi-rec'><span class='oi-lbl'>Recommendation</span>Create a policy that denies read and write access to removable storage (All Removable Storage classes: Deny all access) on workstations and servers. Grant exceptions through a named security group that is approved and reviewed, rather than by unlinking or disabling the policy.<div class='oi-exref'>&#8594; <a href='#ex-7'>See Exhibit OI-7</a> &ndash; current and recommended settings, with a ready-to-use change request.</div></div>
+<div class="oi-resp">
+<div class="oi-lbl">Management response / action</div>
+<div class='oi-write' contenteditable='true' spellcheck='true' aria-label='Management response for OI-7'></div>
+<div class="oi-meta">
+<div class="oi-f"><span class="oi-lbl">Owner</span><div class="oi-line" contenteditable="true"></div></div>
+<div class="oi-f"><span class="oi-lbl">Target date</span><div class="oi-line" contenteditable="true"></div></div>
+<div class="oi-f oi-status"><span class="oi-lbl">Status</span><span class="oi-boxes"><span>&#9744; Open</span><span>&#9744; In progress</span><span>&#9744; Risk accepted</span><span>&#9744; Closed</span></span></div>
+</div></div></div>
+<div class='oi Low'>
+<div class='oi-head'><span class='oi-num'>OI-8</span><span class='sev Low'>Low</span><span class='oi-title'>Unlinked Group Policy Objects</span></div>
+<div class="oi-body">
+<div class='oi-detail'>Three GPOs are not linked to any site, domain or organizational unit, so nothing they contain applies. Unlinked GPOs that still look configured are a recurring source of confusion during an examination.</div>
+<div class='oi-ref'><b>Reference</b>FFIEC IS II.C.2 Technology Design; Architecture, Infrastructure and Operations booklet<br>NIST CSF 2.0 PR.PS<br>CRI Profile PR.PS<br>CIS Controls v8 4.1, 4.2</div>
+</div>
+<div class='oi-rec'><span class='oi-lbl'>Recommendation</span>Review each unlinked GPO. Delete those that are obsolete; for any kept deliberately, record why in the GPO description.<div class='oi-exref'>&#8594; <a href='#ex-8'>See Exhibit OI-8</a> &ndash; the list of 3 item(s) to action, with a ready-to-use change request.</div></div>
+<div class="oi-resp">
+<div class="oi-lbl">Management response / action</div>
+<div class='oi-write' contenteditable='true' spellcheck='true' aria-label='Management response for OI-8'></div>
+<div class="oi-meta">
+<div class="oi-f"><span class="oi-lbl">Owner</span><div class="oi-line" contenteditable="true"></div></div>
+<div class="oi-f"><span class="oi-lbl">Target date</span><div class="oi-line" contenteditable="true"></div></div>
+<div class="oi-f oi-status"><span class="oi-lbl">Status</span><span class="oi-boxes"><span>&#9744; Open</span><span>&#9744; In progress</span><span>&#9744; Risk accepted</span><span>&#9744; Closed</span></span></div>
+</div></div></div>
+<div class='oi Low'>
+<div class='oi-head'><span class='oi-num'>OI-9</span><span class='sev Low'>Low</span><span class='oi-title'>Dormant user and computer accounts</span></div>
+<div class="oi-body">
+<div class='oi-detail'>Eleven enabled user accounts have not signed in for 90 or more days, and four computer accounts have not checked in for 90 or more days.</div>
+<div class='oi-ref'><b>Reference</b>FFIEC IS II.C.7 User Security Controls (provisioning and deprovisioning)<br>NIST CSF 2.0 PR.AA, ID.AM<br>CRI Profile PR.AA, ID.AM<br>CIS Controls v8 5.1, 5.3</div>
+</div>
+<div class='oi-rec'><span class='oi-lbl'>Recommendation</span>Review each account with the account owner or their manager. Disable accounts that are no longer needed and delete them after the retention period in the deprovisioning procedure. Confirm each computer has been retired or replaced, then disable and remove the account. Reconcile against the hardware asset inventory.<div class='oi-exref'>&#8594; <a href='#ex-9'>See Exhibit OI-9</a> &ndash; the list of 10 item(s) to action, with a ready-to-use change request.</div></div>
+<div class="oi-resp">
+<div class="oi-lbl">Management response / action</div>
+<div class='oi-write' contenteditable='true' spellcheck='true' aria-label='Management response for OI-9'></div>
+<div class="oi-meta">
+<div class="oi-f"><span class="oi-lbl">Owner</span><div class="oi-line" contenteditable="true"></div></div>
+<div class="oi-f"><span class="oi-lbl">Target date</span><div class="oi-line" contenteditable="true"></div></div>
+<div class="oi-f oi-status"><span class="oi-lbl">Status</span><span class="oi-boxes"><span>&#9744; Open</span><span>&#9744; In progress</span><span>&#9744; Risk accepted</span><span>&#9744; Closed</span></span></div>
+</div></div></div>
+<h2>Committee review and sign-off</h2>
+<table class="signoff">
+<tr><th style="width:26%">Reviewed by</th><th style="width:26%">Title</th><th style="width:24%">Signature</th><th style="width:24%">Date</th></tr>
+<tr><td></td><td></td><td></td><td></td></tr>
+<tr><td></td><td></td><td></td><td></td></tr>
+<tr><td></td><td></td><td></td><td></td></tr>
+</table>
+<table class="signoff"><tr><th style="width:50%">Committee meeting date</th><th style="width:50%">Minute / agenda reference</th></tr><tr><td></td><td></td></tr></table>
+<div class="exhibits">
+<h2>Exhibits</h2>
+<div class="sub">One exhibit per open item, numbered to match. Each shows either the current and recommended settings or the accounts to act on, followed by a change request written so it can be pasted straight into a ticket.</div>
+<div class='ex ex-settings' id='ex-1'>
+<div class='ex-head'><span class='ex-num'>Exhibit OI-1</span><span class='sev High'>High</span><span class='ex-title'>Account lockout is disabled</span></div>
+<div class='ex-where'><b>Where to set it:</b> Computer Configuration &gt; Policies &gt; Windows Settings &gt; Security Settings &gt; Account Policies &gt; Account Lockout Policy</div>
+<table class="ex-tbl"><tr><th style="width:36%">Setting</th><th style="width:34%">Current</th><th style="width:30%">Recommended</th></tr>
+<tr><td><b>Account lockout threshold</b></td><td>0 invalid logon attempts</td><td class='ex-rec'>5 invalid logon attempts</td></tr>
+<tr><td><b>Account lockout duration</b></td><td class='ex-miss'>Not configured</td><td class='ex-rec'>60 minutes  (0 = locked until an administrator unlocks it)</td></tr>
+<tr><td><b>Reset account lockout counter after</b></td><td class='ex-miss'>Not configured</td><td class='ex-rec'>15 minutes</td></tr>
+</table>
+<div class="oi-lbl ex-tlbl" style="margin-top:12px">Change request</div>
+<div class='ex-ticket'><button class='ex-copy noprint' type='button' onclick='exCopy(this)'>Copy</button><pre>Subject: [OI-1] Account lockout is disabled - corp.examplebank.local
+
+Per the Active Directory &amp; Group Policy Review for corp.examplebank.local dated October 24, 2026 (open item OI-1, severity High), please make the following Group Policy change(s):
+
+Location: Computer Configuration &gt; Policies &gt; Windows Settings &gt; Security Settings &gt; Account Policies &gt; Account Lockout Policy
+
+- Account lockout threshold: set to 5 invalid logon attempts
+    Currently: 0 invalid logon attempts
+- Account lockout duration: set to 60 minutes  (0 = locked until an administrator unlocks it)
+    Currently: Not configured
+- Reset account lockout counter after: set to 15 minutes
+    Currently: Not configured
+
+Reason: The account lockout threshold in Default Domain Policy is set to 0, which disables lockout entirely. An attacker can guess passwords against any account indefinitely without the account ever locking.
+Recommendation: Create a lockout policy that locks the account after 5 invalid attempts for 60 minutes, with the failed-attempt counter resetting after 15 minutes. During that hour only an administrator can unlock it, so unlock requests go through the help desk and are ticketed. If every lockout must be released by an administrator, set the duration to 0 (locked until unlocked). A threshold of 0 - the current setting - means an attacker can guess passwords indefinitely.
+Reference: FFIEC IS II.C.7 User Security Controls; NIST CSF 2.0 PR.AA; CRI Profile PR.AA; CIS Controls v8 6.3; CIS Benchmark - Account Lockout Policy
+
+Please record the change, the date completed and who approved it on this ticket, and update the open item in the committee minutes.</pre></div>
+</div>
+<div class='ex ex-list' id='ex-2'>
+<div class='ex-head'><span class='ex-num'>Exhibit OI-2</span><span class='sev High'>High</span><span class='ex-title'>Service accounts are not restricted from interactive logon</span></div>
+<div class='sub' style='margin:2px 12px 4px'>3 item(s). Restrict these accounts from interactive logon, or convert them to group Managed Service Accounts.</div>
+<table class="ex-tbl"><tr>
+<th>Account</th>
+<th>Name</th>
+<th>Privileged groups</th>
+<th>Requested action</th>
+</tr>
+<tr>
+<td class='mono'>svc.backup</td>
+<td>Backup Service</td>
+<td>Administrators</td>
+<td class='ex-rec'>Deny interactive logon, or convert to gMSA</td>
+</tr>
+<tr>
+<td class='mono'>svc.sqlrpt</td>
+<td>SQL Reporting</td>
+<td></td>
+<td class='ex-rec'>Convert to gMSA (SQL Server supports it)</td>
+</tr>
+<tr>
+<td class='mono'>svc.monitor</td>
+<td>Monitoring Agent</td>
+<td></td>
+<td class='ex-rec'>Deny interactive logon, or convert to gMSA</td>
+</tr>
+</table>
+<div class="oi-lbl ex-tlbl" style="margin-top:12px">Change request</div>
+<div class='ex-ticket'><button class='ex-copy noprint' type='button' onclick='exCopy(this)'>Copy</button><pre>Subject: [OI-2] Service accounts are not restricted from interactive logon - corp.examplebank.local
+
+Per the Active Directory &amp; Group Policy Review for corp.examplebank.local dated October 24, 2026 (open item OI-2, severity High), please action the following 3 item(s):
+
+Restrict these accounts from interactive logon, or convert them to group Managed Service Accounts.
+
+- svc.backup (Backup Service) - Administrators
+- svc.sqlrpt (SQL Reporting)
+- svc.monitor (Monitoring Agent)
+
+Reason: Three enabled accounts that look like service accounts are not denied &quot;Log on locally&quot; or &quot;Log on through Remote Desktop Services&quot; by any applying Group Policy Object, and no GPO in this domain sets either right, so the Windows defaults apply. One of them is a member of the built-in Administrators group.
+Recommendation: Restrict these accounts, or convert them to managed service accounts. To restrict: put the service accounts in a security group and add that group to &quot;Deny log on locally&quot; and &quot;Deny log on through Remote Desktop Services&quot; in a GPO linked where they could otherwise sign in - leaving &quot;Log on as a service&quot; and &quot;Log on as a batch job&quot; in place, because services and scheduled tasks need those and removing them stops the application. To convert: a group Managed Service Account (gMSA) has its password owned by Active Directory, which generates it at 240 random characters and ROTATES IT AUTOMATICALLY every 30 days by default, releasing it only to the hosts you authorise. Nobody ever knows the password, it cannot be typed at a logon prompt, and it never needs manual rotation - which also removes the password-never-expires exception. The domain needs a KDS root key and the application must support gMSA (SQL Server, IIS application pools and scheduled tasks do; many third-party applications do not). Where neither is possible, document the exception and rotate the password on a defined schedule. Create a GPO that denies interactive logon to service and administrative accounts: add the relevant security groups to &quot;Deny log on locally&quot; and &quot;Deny log on through Remote Desktop Services&quot;, linked to the workstation and server OUs. Without it the Windows defaults apply and any enabled account can sign in at a console wherever it has access.
+Reference: FFIEC IS II.C.7 User Security Controls (authentication, least privilege); NIST CSF 2.0 PR.AA; CRI Profile PR.AA; CIS Controls v8 5.1, 5.4
+
+Please record the change, the date completed and who approved it on this ticket, and update the open item in the committee minutes.</pre></div>
+</div>
+<div class='ex ex-settings' id='ex-3'>
+<div class='ex-head'><span class='ex-num'>Exhibit OI-3</span><span class='sev High'>High</span><span class='ex-title'>No applying GPO configures inactivity lock or idle session limits</span></div>
+<table class="ex-tbl"><tr><th style="width:27%">Setting</th><th style="width:24%">Current</th><th style="width:22%">Recommended</th><th style="width:27%">Where to set it</th></tr>
+<tr><td><b>Interactive logon: Machine inactivity limit</b></td><td class='ex-miss'>Not configured</td><td class='ex-rec'>900 seconds (15 min) - no more than 1800 (30 min)</td><td class='ex-path'>Computer Configuration &gt; Policies &gt; Windows Settings &gt; Security Settings &gt; Local Policies &gt; Security Options</td></tr>
+<tr><td><b>Screen saver timeout</b></td><td class='ex-miss'>Not configured</td><td class='ex-rec'>Enabled - 900 seconds</td><td class='ex-path'>User Configuration &gt; Policies &gt; Administrative Templates &gt; Control Panel &gt; Personalization</td></tr>
+<tr><td><b>Password protect the screen saver</b></td><td class='ex-miss'>Not configured</td><td class='ex-rec'>Enabled</td><td class='ex-path'>User Configuration &gt; Policies &gt; Administrative Templates &gt; Control Panel &gt; Personalization</td></tr>
+<tr><td><b>Set time limit for active but idle Remote Desktop Services sessions</b></td><td class='ex-miss'>Not configured</td><td class='ex-rec'>Enabled - 15 minutes</td><td class='ex-path'>Computer Configuration &gt; Policies &gt; Administrative Templates &gt; Windows Components &gt; Remote Desktop Services &gt; Remote Desktop Session Host &gt; Session Time Limits</td></tr>
+</table>
+<div class="oi-lbl ex-tlbl" style="margin-top:12px">Change request</div>
+<div class='ex-ticket'><button class='ex-copy noprint' type='button' onclick='exCopy(this)'>Copy</button><pre>Subject: [OI-3] No applying GPO configures inactivity lock or idle session limits - corp.examplebank.local
+
+Per the Active Directory &amp; Group Policy Review for corp.examplebank.local dated October 24, 2026 (open item OI-3, severity High), please make the following Group Policy change(s):
+
+- Interactive logon: Machine inactivity limit: set to 900 seconds (15 min) - no more than 1800 (30 min)
+    Currently: Not configured
+    Location:  Computer Configuration &gt; Policies &gt; Windows Settings &gt; Security Settings &gt; Local Policies &gt; Security Options
+- Screen saver timeout: set to Enabled - 900 seconds
+    Currently: Not configured
+    Location:  User Configuration &gt; Policies &gt; Administrative Templates &gt; Control Panel &gt; Personalization
+- Password protect the screen saver: set to Enabled
+    Currently: Not configured
+    Location:  User Configuration &gt; Policies &gt; Administrative Templates &gt; Control Panel &gt; Personalization
+- Set time limit for active but idle Remote Desktop Services sessions: set to Enabled - 15 minutes
+    Currently: Not configured
+    Location:  Computer Configuration &gt; Policies &gt; Administrative Templates &gt; Windows Components &gt; Remote Desktop Services &gt; Remote Desktop Session Host &gt; Session Time Limits
+
+Reason: No Group Policy Object that is actually applying sets a machine inactivity limit, a password-protected screen saver timeout, or a Remote Desktop idle session limit. An unattended workstation stays signed in indefinitely.
+Recommendation: Implement a policy that automatically locks a workstation after 15 to 30 minutes of inactivity: set &quot;Interactive logon: Machine inactivity limit&quot; to 900-1800 seconds and require a password on resume from the screen saver. Apply matching idle-session limits to Remote Desktop sessions.
+Reference: FFIEC IS II.C.7 User Security Controls; II.C.15 Logical Security; NIST CSF 2.0 PR.AA; CRI Profile PR.AA, PR.PS; CIS Controls v8 4.3
+
+Please record the change, the date completed and who approved it on this ticket, and update the open item in the committee minutes.</pre></div>
+</div>
+<div class='ex ex-settings' id='ex-4'>
+<div class='ex-head'><span class='ex-num'>Exhibit OI-4</span><span class='sev Medium'>Medium</span><span class='ex-title'>Logon banner is only half configured</span></div>
+<div class='ex-where'><b>Where to set it:</b> Computer Configuration &gt; Policies &gt; Windows Settings &gt; Security Settings &gt; Local Policies &gt; Security Options</div>
+<table class="ex-tbl"><tr><th style="width:36%">Setting</th><th style="width:34%">Current</th><th style="width:30%">Recommended</th></tr>
+<tr><td><b>Interactive logon: Message title for users attempting to log on</b></td><td>NOTICE TO USERS</td><td class='ex-rec'>AUTHORIZED USE NOTICE</td></tr>
+<tr><td><b>Interactive logon: Message text for users attempting to log on</b></td><td class='ex-miss'>Not configured</td><td class='ex-rec'>(see the recommended wording below)</td></tr>
+</table>
+<div class="oi-lbl" style="margin-top:10px">Recommended banner wording</div>
+<div class='ex-wording'><b>AUTHORIZED USE NOTICE</b><br><br>This computer system is provided for authorized business use only.<br><br>By continuing, you acknowledge and agree to comply with the organization&#x27;s Information Security, Acceptable Use, and Computer Use Policies.<br><br>Use of this system may be monitored, recorded, and reviewed by authorized personnel. Users should have no expectation of privacy when using organization-owned systems, networks, email, internet access, or other technology resources.<br><br>Unauthorized access or misuse of this system is prohibited and may result in disciplinary, civil, or criminal action.<br><br>By continuing to log on, you acknowledge and consent to these conditions.</div>
+<div class="oi-lbl ex-tlbl" style="margin-top:12px">Change request</div>
+<div class='ex-ticket'><button class='ex-copy noprint' type='button' onclick='exCopy(this)'>Copy</button><pre>Subject: [OI-4] Logon banner is only half configured - corp.examplebank.local
+
+Per the Active Directory &amp; Group Policy Review for corp.examplebank.local dated October 24, 2026 (open item OI-4, severity Medium), please make the following Group Policy change(s):
+
+Location: Computer Configuration &gt; Policies &gt; Windows Settings &gt; Security Settings &gt; Local Policies &gt; Security Options
+
+- Interactive logon: Message title for users attempting to log on: set to AUTHORIZED USE NOTICE
+    Currently: NOTICE TO USERS
+- Interactive logon: Message text for users attempting to log on: set to (see the recommended wording below)
+    Currently: Not configured
+
+    Title: AUTHORIZED USE NOTICE
+    Text:
+      This computer system is provided for authorized business use only.
+      
+      By continuing, you acknowledge and agree to comply with the organization&#x27;s Information Security, Acceptable Use, and Computer Use Policies.
+      
+      Use of this system may be monitored, recorded, and reviewed by authorized personnel. Users should have no expectation of privacy when using organization-owned systems, networks, email, internet access, or other technology resources.
+      
+      Unauthorized access or misuse of this system is prohibited and may result in disciplinary, civil, or criminal action.
+      
+      By continuing to log on, you acknowledge and consent to these conditions.
+
+Reason: Default Domain Policy sets the banner title but no applying GPO sets the message text (CORP - Logon Banner holds the text but is not linked). Windows displays no banner at all unless both values are configured.
+Recommendation: Set the missing value. Windows only displays the banner when both the message title and the message text are configured.
+Reference: FFIEC IS II.C.15 Logical Security; NIST CSF 2.0 PR.AT, GV.PO; CRI Profile PR.AT, PR.PS; CIS Controls v8 4.1; CIS Benchmark - Interactive logon message
+
+Please record the change, the date completed and who approved it on this ticket, and update the open item in the committee minutes.</pre></div>
+</div>
+<div class='ex ex-list' id='ex-5'>
+<div class='ex-head'><span class='ex-num'>Exhibit OI-5</span><span class='sev Medium'>Medium</span><span class='ex-title'>A disabled account is still a member of a privileged group</span></div>
+<div class='sub' style='margin:2px 12px 4px'>1 item(s). Remove these accounts from the privileged groups listed.</div>
+<table class="ex-tbl"><tr>
+<th>Account</th>
+<th>Name</th>
+<th>Group</th>
+<th>Requested action</th>
+</tr>
+<tr>
+<td class='mono'>adm.legacy</td>
+<td>Legacy Admin</td>
+<td>Domain Admins</td>
+<td class='ex-rec'>Remove from Domain Admins</td>
+</tr>
+</table>
+<div class="oi-lbl ex-tlbl" style="margin-top:12px">Change request</div>
+<div class='ex-ticket'><button class='ex-copy noprint' type='button' onclick='exCopy(this)'>Copy</button><pre>Subject: [OI-5] A disabled account is still a member of a privileged group - corp.examplebank.local
+
+Per the Active Directory &amp; Group Policy Review for corp.examplebank.local dated October 24, 2026 (open item OI-5, severity Medium), please action the following 1 item(s):
+
+Remove these accounts from the privileged groups listed.
+
+- adm.legacy (Legacy Admin) - Domain Admins
+
+Reason: adm.legacy is disabled but remains a member of Domain Admins. Disabling an account does not remove its group memberships, and re-enabling it restores full privilege.
+Recommendation: Review the administrative accounts. Remove every disabled account from Domain Admins, Enterprise Admins, Schema Admins and Administrators, and make removal from privileged groups a step in the deprovisioning checklist.
+Reference: FFIEC IS II.C.7 User Security Controls (least privilege, access rights administration); NIST CSF 2.0 PR.AA; CRI Profile PR.AA; CIS Controls v8 5.4, 6.8
+
+Please record the change, the date completed and who approved it on this ticket, and update the open item in the committee minutes.</pre></div>
+</div>
+<div class='ex ex-list' id='ex-6'>
+<div class='ex-head'><span class='ex-num'>Exhibit OI-6</span><span class='sev Medium'>Medium</span><span class='ex-title'>Privileged accounts have non-expiring passwords</span></div>
+<div class='sub' style='margin:2px 12px 4px'>2 item(s). Remove &quot;Password never expires&quot;, or move the account to a gMSA.</div>
+<table class="ex-tbl"><tr>
+<th>Account</th>
+<th>Name</th>
+<th>Group</th>
+<th>Requested action</th>
+</tr>
+<tr>
+<td class='mono'>adm.vendor</td>
+<td>Core Vendor Support</td>
+<td>Administrators</td>
+<td class='ex-rec'>Remove &quot;Password never expires&quot; and rotate</td>
+</tr>
+<tr>
+<td class='mono'>svc.backup</td>
+<td>Backup Service</td>
+<td>Administrators</td>
+<td class='ex-rec'>Convert to gMSA, or document the exception and rotate on a schedule</td>
+</tr>
+</table>
+<div class="oi-lbl ex-tlbl" style="margin-top:12px">Change request</div>
+<div class='ex-ticket'><button class='ex-copy noprint' type='button' onclick='exCopy(this)'>Copy</button><pre>Subject: [OI-6] Privileged accounts have non-expiring passwords - corp.examplebank.local
+
+Per the Active Directory &amp; Group Policy Review for corp.examplebank.local dated October 24, 2026 (open item OI-6, severity Medium), please action the following 2 item(s):
+
+Remove &quot;Password never expires&quot;, or move the account to a gMSA.
+
+- adm.vendor (Core Vendor Support) - Administrators
+- svc.backup (Backup Service) - Administrators
+
+Reason: Two accounts in the built-in Administrators group are set to &quot;Password never expires&quot;. One of them has not had its password changed in 812 days.
+Recommendation: Review the administrative accounts. Remove &quot;Password never expires&quot; from interactive admin accounts. Move service accounts to group Managed Service Accounts (gMSA) where the application supports it; where it does not, document the exception and rotate the password on a defined schedule.
+Reference: FFIEC IS II.C.7 User Security Controls (least privilege, access rights administration); NIST CSF 2.0 PR.AA; CRI Profile PR.AA; CIS Controls v8 5.4, 6.8
+
+Please record the change, the date completed and who approved it on this ticket, and update the open item in the committee minutes.</pre></div>
+</div>
+<div class='ex ex-settings' id='ex-7'>
+<div class='ex-head'><span class='ex-num'>Exhibit OI-7</span><span class='sev Medium'>Medium</span><span class='ex-title'>Removable storage policy is configured but not applying</span></div>
+<table class="ex-tbl"><tr><th style="width:27%">Setting</th><th style="width:24%">Current</th><th style="width:22%">Recommended</th><th style="width:27%">Where to set it</th></tr>
+<tr><td><b>All Removable Storage classes: Deny all access</b></td><td>Not configured (the GPO that sets it is not applying)</td><td class='ex-rec'>Enabled</td><td class='ex-path'>Computer Configuration &gt; Policies &gt; Administrative Templates &gt; System &gt; Removable Storage Access</td></tr>
+<tr><td><b>Exceptions</b></td><td class='ex-miss'>Not configured</td><td class='ex-rec'>A named, approved security group excluded through the GPO&#x27;s security filtering - reviewed with the access review</td><td class='ex-path'>GPO &gt; Delegation &gt; Advanced (Deny &quot;Apply group policy&quot;)</td></tr>
+</table>
+<div class="oi-lbl ex-tlbl" style="margin-top:12px">Change request</div>
+<div class='ex-ticket'><button class='ex-copy noprint' type='button' onclick='exCopy(this)'>Copy</button><pre>Subject: [OI-7] Removable storage policy is configured but not applying - corp.examplebank.local
+
+Per the Active Directory &amp; Group Policy Review for corp.examplebank.local dated October 24, 2026 (open item OI-7, severity Medium), please make the following Group Policy change(s):
+
+- All Removable Storage classes: Deny all access: set to Enabled
+    Currently: Not configured (the GPO that sets it is not applying)
+    Location:  Computer Configuration &gt; Policies &gt; Administrative Templates &gt; System &gt; Removable Storage Access
+- Exceptions: set to A named, approved security group excluded through the GPO&#x27;s security filtering - reviewed with the access review
+    Currently: Not configured
+    Location:  GPO &gt; Delegation &gt; Advanced (Deny &quot;Apply group policy&quot;)
+
+Reason: CORP - Removable Media (TEST) denies all access to removable storage classes, but its only link is disabled, so no computer receives the setting. No other applying GPO restricts removable media.
+Recommendation: Create a policy that denies read and write access to removable storage (All Removable Storage classes: Deny all access) on workstations and servers. Grant exceptions through a named security group that is approved and reviewed, rather than by unlinking or disabling the policy.
+Reference: FFIEC IS II.C.13 Control of Information; NIST CSF 2.0 PR.DS, PR.PS; CRI Profile PR.DS, PR.PS; CIS Controls v8 3.6, 10.3
+
+Please record the change, the date completed and who approved it on this ticket, and update the open item in the committee minutes.</pre></div>
+</div>
+<div class='ex ex-list' id='ex-8'>
+<div class='ex-head'><span class='ex-num'>Exhibit OI-8</span><span class='sev Low'>Low</span><span class='ex-title'>Unlinked Group Policy Objects</span></div>
+<div class='sub' style='margin:2px 12px 4px'>3 item(s). Delete the obsolete GPOs; record the reason for any kept deliberately.</div>
+<table class="ex-tbl"><tr>
+<th>GPO</th>
+<th>Requested action</th>
+</tr>
+<tr>
+<td>CORP - Logon Banner</td>
+<td class='ex-rec'>Link to the domain root, or delete</td>
+</tr>
+<tr>
+<td>OLD - Terminal Server Settings</td>
+<td class='ex-rec'>Delete - superseded</td>
+</tr>
+<tr>
+<td>CORP - Removable Media (TEST)</td>
+<td class='ex-rec'>Enable the link, or delete</td>
+</tr>
+</table>
+<div class="oi-lbl ex-tlbl" style="margin-top:12px">Change request</div>
+<div class='ex-ticket'><button class='ex-copy noprint' type='button' onclick='exCopy(this)'>Copy</button><pre>Subject: [OI-8] Unlinked Group Policy Objects - corp.examplebank.local
+
+Per the Active Directory &amp; Group Policy Review for corp.examplebank.local dated October 24, 2026 (open item OI-8, severity Low), please action the following 3 item(s):
+
+Delete the obsolete GPOs; record the reason for any kept deliberately.
+
+- CORP - Logon Banner
+- OLD - Terminal Server Settings
+- CORP - Removable Media (TEST)
+
+Reason: Three GPOs are not linked to any site, domain or organizational unit, so nothing they contain applies. Unlinked GPOs that still look configured are a recurring source of confusion during an examination.
+Recommendation: Review each unlinked GPO. Delete those that are obsolete; for any kept deliberately, record why in the GPO description.
+Reference: FFIEC IS II.C.2 Technology Design; Architecture, Infrastructure and Operations booklet; NIST CSF 2.0 PR.PS; CRI Profile PR.PS; CIS Controls v8 4.1, 4.2
+
+Please record the change, the date completed and who approved it on this ticket, and update the open item in the committee minutes.</pre></div>
+</div>
+<div class='ex ex-list' id='ex-9'>
+<div class='ex-head'><span class='ex-num'>Exhibit OI-9</span><span class='sev Low'>Low</span><span class='ex-title'>Dormant user and computer accounts</span></div>
+<div class='sub' style='margin:2px 12px 4px'>10 item(s). Confirm with the owner, then disable and remove.</div>
+<table class="ex-tbl"><tr>
+<th>Account</th>
+<th>Name</th>
+<th>Requested action</th>
+</tr>
+<tr>
+<td class='mono'>cpatel</td>
+<td>Carl Patel</td>
+<td class='ex-rec'>Confirm with the owner, then disable</td>
+</tr>
+<tr>
+<td class='mono'>ijensen</td>
+<td>Ivan Jensen</td>
+<td class='ex-rec'>Confirm with the owner, then disable</td>
+</tr>
+<tr>
+<td class='mono'>nueda</td>
+<td>Nora Ueda</td>
+<td class='ex-rec'>Confirm with the owner, then disable</td>
+</tr>
+<tr>
+<td class='mono'>areyes</td>
+<td>Alex Reyes</td>
+<td class='ex-rec'>Confirm with the owner, then disable</td>
+</tr>
+<tr>
+<td class='mono'>gtate</td>
+<td>Grant Tate</td>
+<td class='ex-rec'>Confirm with the owner, then disable</td>
+</tr>
+<tr>
+<td class='mono'>dwebb</td>
+<td>Dana Webb</td>
+<td class='ex-rec'>Confirm with the owner, then disable</td>
+</tr>
+<tr>
+<td class='mono'>OLD-TLR-04</td>
+<td>Windows 10 Pro</td>
+<td class='ex-rec'>Confirm retired, then disable and remove</td>
+</tr>
+<tr>
+<td class='mono'>CONF-KIOSK</td>
+<td>Windows 10 Pro</td>
+<td class='ex-rec'>Confirm retired, then disable and remove</td>
+</tr>
+<tr>
+<td class='mono'>TEST-IMG-01</td>
+<td>Windows Server 2016 Standard</td>
+<td class='ex-rec'>Confirm retired, then disable and remove</td>
+</tr>
+<tr>
+<td class='mono'>LOAN-LAPTOP-02</td>
+<td>Windows 11 Pro</td>
+<td class='ex-rec'>Confirm retired, then disable and remove</td>
+</tr>
+</table>
+<div class="oi-lbl ex-tlbl" style="margin-top:12px">Change request</div>
+<div class='ex-ticket'><button class='ex-copy noprint' type='button' onclick='exCopy(this)'>Copy</button><pre>Subject: [OI-9] Dormant user and computer accounts - corp.examplebank.local
+
+Per the Active Directory &amp; Group Policy Review for corp.examplebank.local dated October 24, 2026 (open item OI-9, severity Low), please action the following 10 item(s):
+
+Confirm with the owner, then disable and remove.
+
+- cpatel (Carl Patel)
+- ijensen (Ivan Jensen)
+- nueda (Nora Ueda)
+- areyes (Alex Reyes)
+- gtate (Grant Tate)
+- dwebb (Dana Webb)
+- OLD-TLR-04 (Windows 10 Pro)
+- CONF-KIOSK (Windows 10 Pro)
+- TEST-IMG-01 (Windows Server 2016 Standard)
+- LOAN-LAPTOP-02 (Windows 11 Pro)
+
+Reason: Eleven enabled user accounts have not signed in for 90 or more days, and four computer accounts have not checked in for 90 or more days.
+Recommendation: Review each account with the account owner or their manager. Disable accounts that are no longer needed and delete them after the retention period in the deprovisioning procedure. Confirm each computer has been retired or replaced, then disable and remove the account. Reconcile against the hardware asset inventory.
+Reference: FFIEC IS II.C.7 User Security Controls (provisioning and deprovisioning); NIST CSF 2.0 PR.AA, ID.AM; CRI Profile PR.AA, ID.AM; CIS Controls v8 5.1, 5.3
+
+Please record the change, the date completed and who approved it on this ticket, and update the open item in the committee minutes.</pre></div>
+</div>
+</div>
+<script>
+function exCopy(btn){
+  var t = btn.parentNode.querySelector('pre').innerText;
+  function done(){ var o = btn.textContent; btn.textContent = 'Copied'; setTimeout(function(){ btn.textContent = o; }, 1400); }
+  if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(t).then(done, fallback); } else { fallback(); }
+  function fallback(){
+    var a = document.createElement('textarea'); a.value = t; a.style.position = 'fixed'; a.style.opacity = '0';
+    document.body.appendChild(a); a.select();
+    try { document.execCommand('copy'); done(); } catch (e) { btn.textContent = 'Select and copy'; }
+    document.body.removeChild(a);
+  }
+}
+</script>
+<footer>
+Produced with AuditHat (https://audithat.com) using Export-ADAuditReport.ps1 v3.15.0 on 2026-10-24 06:12:44. Directory data read via the ActiveDirectory module.
+<br>Supporting detail: <a class='noprint' href='sample-detailed-report.html'>sample-detailed-report.html</a>
+</footer>
+</div></body></html>
